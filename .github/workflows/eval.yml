@@ -32,8 +32,9 @@ jobs:
       - name: Install runtime + eval deps
         run: |
           python -m pip install --upgrade pip
-          # minimal: only what eval needs (no torch / ultralytics)
-          pip install openai python-dotenv chromadb requests
+          # requirements-ci.txt mirrors runtime deps minus torch/ultralytics;
+          # the ONNX runtime + langgraph are needed by the full eval pipeline.
+          pip install -r requirements-ci.txt requests
 
       - name: Cache RAG index
         uses: actions/cache@v4
