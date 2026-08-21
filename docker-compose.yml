@@ -1,0 +1,16 @@
+services:
+  api:
+    build: .
+    image: visual-inspection-api:0.1
+    container_name: inspection-api
+    ports:
+      - "8000:8000"
+    env_file: .env          # DASHSCOPE_API_KEY injected at runtime, never baked into image
+    volumes:
+      - ./reports:/app/reports       # generated reports visible on host
+      - ./uploads:/app/uploads       # uploaded images visible on host
+      - chroma_index:/app/.chroma_db # RAG vector index persists across rebuilds
+    restart: unless-stopped
+
+volumes:
+  chroma_index:

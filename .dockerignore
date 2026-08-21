@@ -1,0 +1,14 @@
+# Never send these to the Docker build context
+.git
+.venv
+.chroma_db
+reports
+uploads
+output_img
+__pycache__
+*.pyc
+*.pt
+.env
+.DS_Store
+*.md
+!data/standards/*.md

@@ -16,6 +16,7 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 | Report Generation | Markdown + JSON export, timestamped | ✅ Complete |
 | Agent Orchestration | LangGraph StateGraph | ✅ Complete |
 | API Layer | FastAPI + uvicorn | ✅ Complete |
+| Deployment | Docker + docker-compose | ✅ Complete |
 
 ## Key Features
 
@@ -61,6 +62,27 @@ python run_agent.py data/test_images/bus.jpg
 # Start the API service
 uvicorn app.api.server:app --port 8000
 curl -F "image=@data/test_images/bus.jpg" http://localhost:8000/inspect
+```
+
+### Docker
+
+```bash
+# One command: build image + start container
+docker compose up --build -d
+
+# Test
+curl http://localhost:8000/health
+curl -F "image=@data/test_images/bus.jpg" http://localhost:8000/inspect
+
+# Stop
+docker compose down
+```
+
+Docker notes:
+- **Slim runtime image**: `requirements.docker.txt` excludes torch/ultralytics (build-time only) — serving needs ONNX Runtime only, cutting image size by ~2 GB
+- **Secrets stay out of the image**: `DASHSCOPE_API_KEY` injected via `env_file` at runtime
+- **Volumes**: `reports/` and `uploads/` are bind-mounted (results visible on host); the ChromaDB vector index lives in a named volume and persists across rebuilds
+- OpenAPI docs at `http://localhost:8000/docs`
 
 # Custom options
 python run_pipeline.py your_image.jpg --conf 0.35 --k 5 --save-dir my_reports
@@ -76,7 +98,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - **Python 3.12** | PyTorch 2.2.2 | Ultralytics 8.4 | ONNX Runtime 1.23
 - **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
 - **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
-- **Deployment**: FastAPI + Docker (planned)
+- **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose
 
 ## Project Structure
 

@@ -1,0 +1,15 @@
+# Runtime-only dependencies for the Docker image.
+# NOTE: torch / ultralytics are intentionally EXCLUDED — they are only needed
+# for model training/export (export_onnx.py). Serving uses onnxruntime only,
+# which cuts the image size by ~2 GB.
+numpy==1.26.4
+opencv-python==4.11.0.86
+onnxruntime==1.23.2
+fastapi==0.141.1
+uvicorn==0.52.4
+python-multipart==0.0.32
+openai==3.3.1
+python-dotenv==1.2.3
+chromadb==1.5.9
+langgraph==1.2.11
+pillow==12.3.0
