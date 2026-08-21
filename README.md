@@ -13,15 +13,16 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 | Detection | YOLOv8m (Ultralytics + ONNX Runtime) | ✅ Complete |
 | VLM Analysis | Qwen-VL-Max via Alibaba DashScope | ✅ Complete |
 | RAG Standards Retrieval | DashScope Embeddings + ChromaDB | ✅ Complete |
+| Report Generation | Markdown + JSON export, timestamped | ✅ Complete |
 | Agent Orchestration | LangGraph | 📋 Planned |
-| Report Generation | Structured JSON + PDF | 📋 Planned |
 | API Layer | FastAPI + Docker | 📋 Planned |
 
 ## Key Features
 
 - **Detection (D1-D2)**: YOLOv8m with hand-written ONNX inference pipeline, PyTorch/ONNX consistency validated
 - **VLM Analysis (D3)**: Qwen-VL-Max generates 4-section structured reports (Scene / Inventory / Detector Gaps / Risk). Detection JSON injected into prompt to reduce hallucination; domain-gap awareness catches missed objects and false positives
-- **RAG Standards (D4)**: 6 inspection standards (BS EN 1992, ISO 45001, EN 13134, ISO 23953, ISO 14001, pedestrian safety) embedded via DashScope text-embedding-v2, stored in ChromaDB, retrieved per report
+- **RAG Standards (D4)**: 6 inspection standards (BS EN 1992, ISO 45001, EN 13134, ISO 23953, ISO 14001, pedestrian safety) embedded via DashScope text-embedding-v2, stored in ChromaDB (cosine similarity), retrieved per report
+- **Report Export**: timestamped Markdown + JSON + bbox-annotated image saved to `reports/` on every run
 
 ## Verified Behaviors
 
@@ -46,12 +47,17 @@ pip install -r requirements.txt
 # Configure API key (Alibaba Cloud DashScope)
 echo "DASHSCOPE_API_KEY=sk-your-key" > .env
 
-# Run full pipeline (detection + VLM + RAG)
+# Run full pipeline (detection + VLM + RAG + report export)
 python run_pipeline.py data/test_images/bus.jpg
+
+# Custom options
+python run_pipeline.py your_image.jpg --conf 0.35 --k 5 --save-dir my_reports
 
 # Detection only
 python run_detection.py --model yolov8m.pt --source data/test_images/bus.jpg
 ```
+
+Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report), `.json` (machine-readable), `_det.jpg` (annotated image).
 
 ## Tech Stack
 
@@ -70,10 +76,13 @@ python run_detection.py --model yolov8m.pt --source data/test_images/bus.jpg
 │   │   └── client.py        # VLMClient (Qwen-VL-Max, image auto-resize)
 │   └── rag/
 │       └── retriever.py     # StandardsRetriever (embed + ChromaDB)
+│   └── reporting/
+│       └── exporter.py      # ReportExporter (Markdown + JSON + annotated image)
 ├── data/
 │   ├── standards/           # 6 inspection standards (markdown)
 │   └── test_images/         # Sample inspection images
-├── run_pipeline.py          # Full pipeline: detect → VLM → RAG
+├── reports/                 # Generated reports (timestamped, gitignored)
+├── run_pipeline.py          # Full pipeline: detect → VLM → RAG → export
 ├── export_onnx.py           # Export PyTorch model to ONNX
 ├── compare_d1_d2.py         # PyTorch vs ONNX consistency check
 └── requirements.txt

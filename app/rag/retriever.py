@@ -31,7 +31,10 @@ class StandardsRetriever:
         self.chroma = chromadb.PersistentClient(path=db_path)
         self.collection = self.chroma.get_or_create_collection(
             name="inspection_standards",
-            metadata={"description": "Visual inspection standards knowledge base"},
+            metadata={
+                "description": "Visual inspection standards knowledge base",
+                "hnsw:space": "cosine",  # distance = 1 - cosine_similarity
+            },
         )
         self._index_standards(standards_dir)
 

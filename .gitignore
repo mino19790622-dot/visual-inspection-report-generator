@@ -16,8 +16,10 @@ __pycache__/
 out_*.jpg
 output_img/
 
+# Generated reports (regenerated per run, keep repo lean)
+reports/
+
 # Misc
 .dist/
-.env
 .env
 .chroma_db/
