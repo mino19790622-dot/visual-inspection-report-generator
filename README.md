@@ -1,5 +1,7 @@
 # Visual Inspection Report Generator
 
+[![CI](https://github.com/mino19790622-dot/visual-inspection-report-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/mino19790622-dot/visual-inspection-report-generator/actions/workflows/ci.yml)
+
 AI-powered visual inspection system: object detection → VLM visual reasoning → RAG standards retrieval → structured inspection report.
 
 ## Architecture
@@ -38,8 +40,25 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 | Group photo (5 people) | 4 persons (missed 1) | Caught the missed 5th person | Pedestrian safety standard |
 | Aerial construction site | 3 false positives | Identified all as domain-gap errors | Construction safety + hazard thresholds |
 
-## Quick Start
+## Testing
 
+55 unit/integration tests (87% coverage), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
+
+- `test_detection.py` — letterbox preprocessing, bbox decoding roundtrip, confidence filtering, NMS suppression/clipping
+- `test_agent.py` — risk classification (explicit statement vs keyword fallback, negation safety), routing logic, and a **full LangGraph run** verifying adaptive re-detection and risk-based retrieval depth
+- `test_rag.py` — chunking (header split / overlap / fragment filter) and retrieval against a real in-memory ChromaDB with deterministic hash embeddings
+- `test_api.py` — FastAPI `TestClient`: schema contract, 415/500 error paths, mocked agent
+- `test_exporter.py` — Markdown/JSON report content, graceful annotation failure
+
+```bash
+pip install -r requirements-ci.txt
+ruff check app tests
+pytest --cov=app --cov-fail-under=80
+```
+
+CI runs the same suite on every push/PR (`.github/workflows/ci.yml`).
+
+## Quick Start
 ```bash
 # Clone
 git clone https://github.com/mino19790622-dot/visual-inspection-report-generator.git
@@ -166,10 +185,12 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │   └── gh-oidc-*.json          # GitHub OIDC trust + permission policies
 ├── scripts/
 │   └── deploy.sh               # Build + push to ECR + deploy (local)
+├── tests/                      # pytest suite (55 tests, 87% coverage, no network)
 ├── .github/workflows/
+│   ├── ci.yml                  # CI: ruff + pytest + coverage on push/PR
 │   └── deploy.yml              # CI: OIDC → ECR → App Runner on push to main
 ├── Dockerfile / docker-compose.yml / .dockerignore
-└── requirements.txt / requirements.docker.txt
+└── requirements.txt / requirements.docker.txt / requirements-ci.txt
 ```
 
 ## Author

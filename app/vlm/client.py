@@ -2,12 +2,12 @@
 """VLM client — Qwen-VL via Alibaba Cloud DashScope (OpenAI-compatible API)."""
 
 import base64
-import io
 import json
-import cv2
-from openai import OpenAI
-from dotenv import load_dotenv
 import os
+
+import cv2
+from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 

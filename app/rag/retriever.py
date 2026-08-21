@@ -7,9 +7,10 @@ with ChromaDB as local persistent vector store.
 
 import os
 import re
-from openai import OpenAI
-from dotenv import load_dotenv
+
 import chromadb
+from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -99,7 +100,7 @@ class StandardsRetriever:
             raise ValueError(f"No standards found in {standards_dir}")
 
         print(f"  Indexing {len(docs)} chunks from "
-              f"{len(set(m['source'] for m in metadatas))} standards...")
+              f"{len({m['source'] for m in metadatas})} standards...")
         embeddings = self._embed_batch(docs)
         self.collection.add(
             ids=ids,

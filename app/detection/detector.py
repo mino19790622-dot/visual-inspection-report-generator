@@ -1,6 +1,7 @@
 
 # app/detection/detector.py
-import json, time
+import time
+
 import cv2
 import numpy as np
 import onnxruntime as ort

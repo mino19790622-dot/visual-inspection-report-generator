@@ -24,3 +24,7 @@ reports/
 .env
 .chroma_db/
 uploads/
+.coverage
+coverage.xml
+.pytest_cache/
+.ruff_cache/

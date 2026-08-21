@@ -77,7 +77,8 @@ def inspect(image: UploadFile = File(...),
         # sync def endpoint -> FastAPI runs it in a threadpool, no event-loop block
         state = agent.run(path, conf_thres=conf, save=save)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent failed: {e}")
+        raise HTTPException(status_code=500,
+                            detail=f"Agent failed: {e}") from e
 
     return {
         "image": image.filename,

@@ -17,12 +17,12 @@ import re
 from functools import lru_cache
 from typing import TypedDict
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 
 from app.detection.detector import YOLODetector
-from app.vlm.client import VLMClient
 from app.rag.retriever import StandardsRetriever
 from app.reporting.exporter import ReportExporter
+from app.vlm.client import VLMClient
 
 
 class AgentState(TypedDict, total=False):

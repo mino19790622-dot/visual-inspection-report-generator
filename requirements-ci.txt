@@ -1,0 +1,17 @@
+# Minimal dependency set for CI (lint + unit tests).
+# Mirrors the versions in requirements.txt but omits heavy, test-irrelevant
+# packages (torch, ultralytics, matplotlib). The ONNX model is not needed:
+# tests mock the inference session and all DashScope calls.
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+onnxruntime==1.23.2
+fastapi==0.141.1
+httpx==0.28.1
+python-multipart==0.0.32
+python-dotenv==1.2.3
+openai==3.3.1
+chromadb==1.5.9
+langgraph==1.2.11
+pytest
+pytest-cov
+ruff

@@ -69,10 +69,10 @@ class ReportExporter:
                      decisions: list = None) -> str:
         decisions = decisions or []
         lines = []
-        lines.append(f"# Visual Inspection Report")
+        lines.append("# Visual Inspection Report")
         lines.append("")
-        lines.append(f"| Field | Value |")
-        lines.append(f"|-------|-------|")
+        lines.append("| Field | Value |")
+        lines.append("|-------|-------|")
         lines.append(f"| Image | `{image_path}` |")
         lines.append(f"| Generated | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} |")
         lines.append(f"| Objects detected | {sum(det_result['counts'].values())} |")
