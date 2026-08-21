@@ -1,0 +1,60 @@
+# AWS App Runner service definition
+# -------------------------------------------------------------
+# This deploys the container image that is built & pushed to ECR
+# by `scripts/deploy.sh` (local) or `.github/workflows/deploy.yml` (CI).
+#
+# One-time create:
+#   aws apprunner create-service --cli-input-yaml file://deploy/apprunner.yaml
+#
+# After each new image push, roll out:
+#   aws apprunner start-deployment --service-arn <SERVICE_ARN>
+#
+# App Runner gives you a public HTTPS URL + autoscaling for free.
+# Service role & instance role are created automatically on first run.
+# -------------------------------------------------------------
+
+ServiceName: visual-inspection-api
+
+SourceConfiguration:
+  ImageRepository:
+    # Replace <AWS_ACCOUNT_ID> and <REGION> (use eu-west-1 — Ireland, closest to you)
+    ImageIdentifier: "<AWS_ACCOUNT_ID>.dkr.ecr.eu-west-1.amazonaws.com/visual-inspection-api:latest"
+    ImageRepositoryType: ECR
+    ImageConfiguration:
+      Port: 8000
+      # ---- Secrets: pulled from AWS Secrets Manager at runtime ----
+      # Create once:
+      #   aws secretsmanager create-secret --name inspection/dashscope \
+      #     --secret-string "{\"DASHSCOPE_API_KEY\":\"sk-xxx\"}"
+      # Then put the returned ARN below.
+      RuntimeEnvironmentSecrets:
+        - Name: DASHSCOPE_API_KEY
+          ValueFrom: "arn:aws:secretsmanager:eu-west-1:<AWS_ACCOUNT_ID>:secret:inspection/dashscope-XXXXXX"
+      # ---- Non-secret env vars ----
+      RuntimeEnvironmentVariables:
+        - Name: ENV
+          Value: "production"
+        - Name: LOG_LEVEL
+          Value: "info"
+
+  # We trigger deployments explicitly from CI / deploy.sh (not on every ECR push)
+  AutoDeploymentsEnabled: false
+
+HealthCheckConfiguration:
+  Protocol: HTTP
+  Path: /health
+  Interval: 10
+  Timeout: 5
+  HealthyThreshold: 3
+  UnhealthyThreshold: 5
+
+InstanceConfiguration:
+  # ONNX Runtime CPU inference is enough for a demo; no GPU needed (keeps cost ~0 on free tier)
+  Cpu: 1 vCPU
+  Memory: 2 GB
+
+Tags:
+  - Key: project
+    Value: visual-inspection-report-generator
+  - Key: owner
+    Value: mino-zhang

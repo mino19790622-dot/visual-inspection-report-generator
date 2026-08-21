@@ -84,6 +84,27 @@ Docker notes:
 - **Volumes**: `reports/` and `uploads/` are bind-mounted (results visible on host); the ChromaDB vector index lives in a named volume and persists across rebuilds
 - OpenAPI docs at `http://localhost:8000/docs`
 
+### Cloud Deployment (AWS)
+
+The Docker image is cloud-ready. Push it to **Amazon ECR** and run it on **AWS App Runner** (fully managed, public HTTPS URL, autoscaling, no GPU needed for the demo). This is also directly relevant to the AWS SAA-C03 certification path.
+
+```bash
+# 1. One-time: create the ECR repo + App Runner service
+export AWS_ACCOUNT_ID=123456789012
+export APP_RUNNER_SERVICE_ARN=$(aws apprunner create-service \
+  --cli-input-yaml file://deploy/apprunner.yaml \
+  --query 'Service.ServiceArn' --output text)
+
+# 2. Build, push to ECR, and roll out (yolov8m.onnx must exist locally)
+./scripts/deploy.sh
+```
+
+- `deploy/apprunner.yaml` — App Runner service definition (health check on `/health`, secret from AWS Secrets Manager, 1 vCPU / 2 GB).
+- `scripts/deploy.sh` — login → build → push to ECR → start deployment.
+- `.github/workflows/deploy.yml` — on every push to `main`, authenticates via OIDC (no stored keys), builds, pushes to ECR, and triggers App Runner. The ONNX model is fetched from S3 at build time (it is gitignored).
+
+> **Note:** `yolov8m.onnx` (~100 MB) is gitignored. For local deploys keep it in the project root; for CI, store it in S3 and set `MODEL_S3_URI` (see the workflow file).
+
 ```bash
 # Custom options
 python run_pipeline.py your_image.jpg --conf 0.35 --k 5 --save-dir my_reports
@@ -99,7 +120,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - **Python 3.12** | PyTorch 2.2.2 | Ultralytics 8.4 | ONNX Runtime 1.23
 - **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
 - **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
-- **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose
+- **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose; cloud-ready on AWS ECR + App Runner (CI/CD via GitHub Actions OIDC)
 
 ## Project Structure
 
@@ -128,7 +149,14 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 ├── docs/
 │   ├── USER_GUIDE.md           # Operation manual (English)
 │   └── USER_GUIDE_zh.md        # Operation manual (Chinese)
-└── requirements.txt
+├── deploy/
+│   └── apprunner.yaml          # AWS App Runner service definition
+├── scripts/
+│   └── deploy.sh               # Build + push to ECR + deploy (local)
+├── .github/workflows/
+│   └── deploy.yml              # CI: OIDC → ECR → App Runner on push to main
+├── Dockerfile / docker-compose.yml / .dockerignore
+└── requirements.txt / requirements.docker.txt
 ```
 
 ## Author

@@ -1,0 +1,73 @@
+name: Build & Push to AWS ECR
+
+# Builds the container image and pushes it to Amazon ECR on every push to main.
+# Uses GitHub OIDC (no long-lived AWS keys). Optionally triggers an App Runner
+# deployment. The yolov8m.onnx model is gitignored, so it is fetched from S3
+# at build time (see MODEL_FROM_S3 below).
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  id-token: write      # required for OIDC -> AWS
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPO: visual-inspection-api
+  # S3 object holding the ONNX model, e.g. s3://my-bucket/models/yolov8m.onnx
+  MODEL_S3_URI: ""
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch ONNX model from S3 (gitignored, not in repo)
+        if: env.MODEL_S3_URI != ''
+        run: aws s3 cp "$MODEL_S3_URI" yolov8m.onnx
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG" .
+          docker push "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG"
+          # keep a mutable :latest tag for App Runner to reference
+          docker tag "$ECR_REGISTRY/$ECR_REPO:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPO:latest"
+          docker push "$ECR_REGISTRY/$ECR_REPO:latest"
+
+      - name: Trigger App Runner deployment
+        if: env.APP_RUNNER_SERVICE_ARN != ''
+        run: |
+          aws apprunner start-deployment \
+            --service-arn "$APP_RUNNER_SERVICE_ARN" \
+            --region "$AWS_REGION"
+        env:
+          APP_RUNNER_SERVICE_ARN: ${{ secrets.APP_RUNNER_SERVICE_ARN }}
+
+# ---------------------------------------------------------------
+# One-time AWS setup (run locally):
+#   1. Create an OIDC identity provider + IAM role for GitHub,
+#      and store its ARN in repo secret AWS_ROLE_ARN.
+#   2. Put the ONNX model in S3 and set MODEL_S3_URI (or run deploy.sh locally).
+#   3. Create the App Runner service:
+#        aws apprunner create-service --cli-input-yaml file://deploy/apprunner.yaml
+#      and store its ARN in repo secret APP_RUNNER_SERVICE_ARN.
+# ---------------------------------------------------------------
