@@ -125,7 +125,9 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 ├── run_agent.py             # LangGraph agent CLI
 ├── export_onnx.py           # Export PyTorch model to ONNX
 ├── compare_d1_d2.py         # PyTorch vs ONNX consistency check
-├── docs/USER_GUIDE_zh.md    # Chinese operation manual (install / run / Docker / troubleshooting)
+├── docs/
+│   ├── USER_GUIDE.md           # Operation manual (English)
+│   └── USER_GUIDE_zh.md        # Operation manual (Chinese)
 └── requirements.txt
 ```
 
@@ -138,4 +140,5 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 
 ## Documentation
 
-- [docs/USER_GUIDE_zh.md](docs/USER_GUIDE_zh.md) — step-by-step operation manual (install, three run modes, Docker, troubleshooting)
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — step-by-step operation manual (install, three run modes, Docker, troubleshooting)
+- [docs/USER_GUIDE_zh.md](docs/USER_GUIDE_zh.md) — 中文操作手册（安装 / 三种运行方式 / Docker / 常见问题排查）

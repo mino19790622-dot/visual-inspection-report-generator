@@ -447,6 +447,7 @@ visual-inspection-report-generator/
 │   ├── standards/                # 6 个检验标准 md
 │   └── test_images/              # 示例图
 ├── docs/                         # 文档
+│   ├── USER_GUIDE.md             # 英文操作手册
 │   └── USER_GUIDE_zh.md          # ← 本文件
 ├── reports/                      # 报告输出（gitignored）
 ├── uploads/                      # API 上传暂存
