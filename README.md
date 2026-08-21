@@ -84,6 +84,7 @@ Docker notes:
 - **Volumes**: `reports/` and `uploads/` are bind-mounted (results visible on host); the ChromaDB vector index lives in a named volume and persists across rebuilds
 - OpenAPI docs at `http://localhost:8000/docs`
 
+```bash
 # Custom options
 python run_pipeline.py your_image.jpg --conf 0.35 --k 5 --save-dir my_reports
 
@@ -124,6 +125,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 ├── run_agent.py             # LangGraph agent CLI
 ├── export_onnx.py           # Export PyTorch model to ONNX
 ├── compare_d1_d2.py         # PyTorch vs ONNX consistency check
+├── docs/USER_GUIDE_zh.md    # Chinese operation manual (install / run / Docker / troubleshooting)
 └── requirements.txt
 ```
 
@@ -133,3 +135,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - GitHub: [@mino19790622-dot](https://github.com/mino19790622-dot)
 - Background: 3 years CV algorithm engineering (PyTorch/YOLOX/TensorRT)
 - MSc Computer Science candidate @ Maynooth University, Ireland
+
+## Documentation
+
+- [docs/USER_GUIDE_zh.md](docs/USER_GUIDE_zh.md) — step-by-step operation manual (install, three run modes, Docker, troubleshooting)
