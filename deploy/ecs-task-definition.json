@@ -1,0 +1,49 @@
+{
+  "family": "visual-inspection-api",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::190944420576:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "190944420576.dkr.ecr.eu-west-1.amazonaws.com/visual-inspection-api:latest",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DASHSCOPE_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-1:190944420576:secret:inspection/dashscope-Prntzf"
+        }
+      ],
+      "environment": [
+        { "name": "ENV", "value": "production" },
+        { "name": "LOG_LEVEL", "value": "info" }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/visual-inspection-api",
+          "awslogs-region": "eu-west-1",
+          "awslogs-stream-prefix": "api"
+        }
+      }
+    }
+  ],
+  "tags": [
+    { "key": "project", "value": "visual-inspection-report-generator" },
+    { "key": "owner", "value": "mino-zhang" }
+  ]
+}

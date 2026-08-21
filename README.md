@@ -86,20 +86,27 @@ Docker notes:
 
 ### Cloud Deployment (AWS)
 
-The Docker image is cloud-ready. Push it to **Amazon ECR** and run it on **AWS App Runner** (fully managed, public HTTPS URL, autoscaling, no GPU needed for the demo). This is also directly relevant to the AWS SAA-C03 certification path.
+The Docker image is cloud-ready and **deployed live on AWS ECS Fargate** (eu-west-1) — the same image also runs on AWS App Runner (fully managed, public HTTPS URL, autoscaling; blocked only by new-account activation lag). This is also directly relevant to the AWS SAA-C03 certification path.
 
 ```bash
-# 1. One-time: create the ECR repo + App Runner service
+# Option A — App Runner (fully managed)
 export AWS_ACCOUNT_ID=123456789012
 export APP_RUNNER_SERVICE_ARN=$(aws apprunner create-service \
   --cli-input-yaml file://deploy/apprunner.yaml \
   --query 'Service.ServiceArn' --output text)
+./scripts/deploy.sh   # build → push to ECR → roll out
 
-# 2. Build, push to ECR, and roll out (yolov8m.onnx must exist locally)
-./scripts/deploy.sh
+# Option B — ECS Fargate (works on brand-new accounts)
+aws ecs create-cluster --cluster-name default
+aws ecs register-task-definition --cli-input-json file://deploy/ecs-task-definition.json
+aws ecs run-task --cluster default --launch-type FARGATE \
+  --task-definition visual-inspection-api:2 \
+  --network-configuration "awsvpcConfiguration={subnets=[<subnet-id>],assignPublicIp=ENABLED,securityGroups=[<sg-id>]}"
+# Full walkthrough: docs/AWS_DEPLOYMENT.md
 ```
 
 - `deploy/apprunner.yaml` — App Runner service definition (health check on `/health`, secret from AWS Secrets Manager, 1 vCPU / 2 GB).
+- `deploy/ecs-task-definition.json` — Fargate task definition (awsvpc networking, secret injected from Secrets Manager, CloudWatch logs, container health check).
 - `scripts/deploy.sh` — login → build → push to ECR → start deployment.
 - `.github/workflows/deploy.yml` — on every push to `main`, authenticates via OIDC (no stored keys), builds, pushes to ECR, and triggers App Runner. The ONNX model is fetched from S3 at build time (it is gitignored).
 
@@ -120,7 +127,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - **Python 3.12** | PyTorch 2.2.2 | Ultralytics 8.4 | ONNX Runtime 1.23
 - **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
 - **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
-- **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose; cloud-ready on AWS ECR + App Runner (CI/CD via GitHub Actions OIDC)
+- **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose; deployed live on AWS ECS Fargate + ECR (CI/CD via GitHub Actions OIDC)
 
 ## Project Structure
 
@@ -148,9 +155,15 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 ├── compare_d1_d2.py         # PyTorch vs ONNX consistency check
 ├── docs/
 │   ├── USER_GUIDE.md           # Operation manual (English)
-│   └── USER_GUIDE_zh.md        # Operation manual (Chinese)
+│   ├── USER_GUIDE_zh.md        # Operation manual (Chinese)
+│   ├── AWS_DEPLOYMENT.md       # AWS deployment runbook (English)
+│   └── AWS_DEPLOYMENT_zh.md    # AWS deployment runbook (Chinese)
 ├── deploy/
-│   └── apprunner.yaml          # AWS App Runner service definition
+│   ├── apprunner.yaml          # AWS App Runner service definition
+│   ├── ecs-task-definition.json  # AWS ECS Fargate task definition
+│   ├── ecs-execution-trust.json  # ECS execution role trust policy
+│   ├── ecs-execution-secrets-policy.json  # ECS secret-read policy
+│   └── gh-oidc-*.json          # GitHub OIDC trust + permission policies
 ├── scripts/
 │   └── deploy.sh               # Build + push to ECR + deploy (local)
 ├── .github/workflows/
@@ -170,3 +183,5 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — step-by-step operation manual (install, three run modes, Docker, troubleshooting)
 - [docs/USER_GUIDE_zh.md](docs/USER_GUIDE_zh.md) — 中文操作手册（安装 / 三种运行方式 / Docker / 常见问题排查）
+- [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) — AWS deployment runbook (ECR + App Runner + GitHub OIDC)
+- [docs/AWS_DEPLOYMENT_zh.md](docs/AWS_DEPLOYMENT_zh.md) — AWS 部署操作手册（中文，上云全流程）
