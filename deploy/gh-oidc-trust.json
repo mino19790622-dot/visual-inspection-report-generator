@@ -8,7 +8,12 @@
     "Action": "sts:AssumeRoleWithWebIdentity",
     "Condition": {
       "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
-      "StringLike":  { "token.actions.githubusercontent.com:sub": "repo:mino19790622-dot/visual-inspection-report-generator:*" }
+      "StringLike": {
+        "token.actions.githubusercontent.com:sub": [
+          "repo:mino19790622-dot/visual-inspection-report-generator:*",
+          "repo:mino19790622-dot@*/visual-inspection-report-generator@*:*"
+        ]
+      }
     }
   }]
 }

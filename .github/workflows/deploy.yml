@@ -18,8 +18,8 @@ permissions:
 env:
   AWS_REGION: eu-west-1
   ECR_REPO: visual-inspection-api
-  # S3 object holding the ONNX model, e.g. s3://my-bucket/models/yolov8m.onnx
-  MODEL_S3_URI: ""
+  # S3 object holding the ONNX model (gitignored, fetched at build time)
+  MODEL_S3_URI: s3://visual-inspection-models-190944420576/yolov8m.onnx
 
 jobs:
   build-and-push:

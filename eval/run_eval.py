@@ -21,7 +21,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # ensure project root is on sys.path when run as `python eval/run_eval.py`
@@ -180,7 +180,7 @@ def main() -> int:
         os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump({
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "threshold": args.threshold,
                 "overall_score": round(overall, 3),
                 "passed": overall >= args.threshold,
