@@ -14,8 +14,8 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 | VLM Analysis | Qwen-VL-Max via Alibaba DashScope | ✅ Complete |
 | RAG Standards Retrieval | DashScope Embeddings + ChromaDB | ✅ Complete |
 | Report Generation | Markdown + JSON export, timestamped | ✅ Complete |
-| Agent Orchestration | LangGraph | 📋 Planned |
-| API Layer | FastAPI + Docker | 📋 Planned |
+| Agent Orchestration | LangGraph StateGraph | ✅ Complete |
+| API Layer | FastAPI + uvicorn | ✅ Complete |
 
 ## Key Features
 
@@ -23,6 +23,11 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 - **VLM Analysis (D3)**: Qwen-VL-Max generates 4-section structured reports (Scene / Inventory / Detector Gaps / Risk). Detection JSON injected into prompt to reduce hallucination; domain-gap awareness catches missed objects and false positives
 - **RAG Standards (D4)**: 6 inspection standards (BS EN 1992, ISO 45001, EN 13134, ISO 23953, ISO 14001, pedestrian safety) embedded via DashScope text-embedding-v2, stored in ChromaDB (cosine similarity), retrieved per report
 - **Report Export**: timestamped Markdown + JSON + bbox-annotated image saved to `reports/` on every run
+- **Agent Orchestration (D5)**: LangGraph StateGraph with real decision logic —
+  - *Adaptive re-detection*: zero detections → automatically lower confidence threshold and retry once
+  - *Risk-based retrieval depth*: risk level parsed from the VLM's Risk Assessment section (negation-safe) controls how many standards are retrieved (low=3, medium=4, high=5)
+  - All decisions logged in state and exported in every report
+- **API Layer (D6)**: FastAPI service — `POST /inspect` (image upload → full JSON report), `GET /standards`, `GET /health`
 
 ## Verified Behaviors
 
@@ -49,6 +54,13 @@ echo "DASHSCOPE_API_KEY=sk-your-key" > .env
 
 # Run full pipeline (detection + VLM + RAG + report export)
 python run_pipeline.py data/test_images/bus.jpg
+
+# Or run the LangGraph agent (adds adaptive re-detection + risk-based retrieval)
+python run_agent.py data/test_images/bus.jpg
+
+# Start the API service
+uvicorn app.api.server:app --port 8000
+curl -F "image=@data/test_images/bus.jpg" http://localhost:8000/inspect
 
 # Custom options
 python run_pipeline.py your_image.jpg --conf 0.35 --k 5 --save-dir my_reports
@@ -78,11 +90,16 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │       └── retriever.py     # StandardsRetriever (embed + ChromaDB)
 │   └── reporting/
 │       └── exporter.py      # ReportExporter (Markdown + JSON + annotated image)
+│   └── agent/
+│       └── graph.py         # LangGraph StateGraph (adaptive retry + risk routing)
+│   └── api/
+│       └── server.py        # FastAPI: POST /inspect, GET /standards, GET /health
 ├── data/
 │   ├── standards/           # 6 inspection standards (markdown)
 │   └── test_images/         # Sample inspection images
 ├── reports/                 # Generated reports (timestamped, gitignored)
-├── run_pipeline.py          # Full pipeline: detect → VLM → RAG → export
+├── run_pipeline.py          # Linear pipeline: detect → VLM → RAG
+├── run_agent.py             # LangGraph agent CLI
 ├── export_onnx.py           # Export PyTorch model to ONNX
 ├── compare_d1_d2.py         # PyTorch vs ONNX consistency check
 └── requirements.txt

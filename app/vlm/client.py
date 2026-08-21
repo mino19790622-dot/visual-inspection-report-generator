@@ -84,7 +84,7 @@ Given this is a visual inspection context, note any safety risks, structural con
                     ],
                 }
             ],
-            temperature=0.2,
+            temperature=0,  # deterministic: inspection reports must be reproducible
             max_tokens=2000,
         )
         return response.choices[0].message.content

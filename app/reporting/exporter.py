@@ -13,8 +13,9 @@ class ReportExporter:
         self.out_dir = out_dir
 
     def export(self, image_path: str, det_result: dict, vlm_report: str,
-               standards: list, draw_fn=None) -> dict:
+               standards: list, draw_fn=None, decisions: list = None) -> dict:
         """Export a full report. draw_fn(image_path, det_result, out_path) draws bboxes."""
+        decisions = decisions or []
         os.makedirs(self.out_dir, exist_ok=True)
         stem = os.path.splitext(os.path.basename(image_path))[0]
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -22,7 +23,8 @@ class ReportExporter:
         paths = {"markdown": base + ".md", "json": base + ".json"}
 
         # 1. Markdown report
-        md = self._to_markdown(image_path, det_result, vlm_report, standards)
+        md = self._to_markdown(image_path, det_result, vlm_report,
+                               standards, decisions)
         with open(paths["markdown"], "w", encoding="utf-8") as f:
             f.write(md)
 
@@ -36,6 +38,7 @@ class ReportExporter:
                 "detections": det_result["detections"],
             },
             "vlm_report": vlm_report,
+            "agent_decisions": decisions,
             "standards": [
                 {
                     "standard": s["standard"],
@@ -62,7 +65,9 @@ class ReportExporter:
 
     # ------------------------------------------------------------------ #
     def _to_markdown(self, image_path: str, det_result: dict,
-                     vlm_report: str, standards: list) -> str:
+                     vlm_report: str, standards: list,
+                     decisions: list = None) -> str:
+        decisions = decisions or []
         lines = []
         lines.append(f"# Visual Inspection Report")
         lines.append("")
@@ -108,6 +113,14 @@ class ReportExporter:
                 lines.append("")
         else:
             lines.append("*No relevant standards found.*")
+            lines.append("")
+
+        # Agent decisions
+        if decisions:
+            lines.append("## 4. Agent Decisions")
+            lines.append("")
+            for d in decisions:
+                lines.append(f"- {d}")
             lines.append("")
 
         lines.append("---")
