@@ -1,27 +1,35 @@
 # Visual Inspection Report Generator
 
-AI-powered visual inspection system that combines object detection with vision-language model analysis to generate structured inspection reports.
+AI-powered visual inspection system: object detection → VLM visual reasoning → RAG standards retrieval → structured inspection report.
 
 ## Architecture
 
 ```
-Image Input → YOLOv8 Detection → VLM Analysis → Structured Report
+Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Inspection Report
 ```
 
 | Layer | Technology | Status |
 |-------|-----------|--------|
 | Detection | YOLOv8m (Ultralytics + ONNX Runtime) | ✅ Complete |
-| VLM Analysis | Qwen2.5-VL via OpenRouter API | 🚧 In Progress |
-| RAG Standards Retrieval | LangChain + Vector DB | 📋 Planned |
+| VLM Analysis | Qwen-VL-Max via Alibaba DashScope | ✅ Complete |
+| RAG Standards Retrieval | DashScope Embeddings + ChromaDB | ✅ Complete |
 | Agent Orchestration | LangGraph | 📋 Planned |
 | Report Generation | Structured JSON + PDF | 📋 Planned |
 | API Layer | FastAPI + Docker | 📋 Planned |
 
-## Current Features
+## Key Features
 
-- **D1: PyTorch Inference** — YOLOv8m detection with 237ms latency on Intel Mac
-- **D2: ONNX Pipeline** — Exported to ONNX format, custom inference pipeline, D1/D2 consistency validation
-- Supports 80 COCO classes with confidence threshold tuning (default: 0.25)
+- **Detection (D1-D2)**: YOLOv8m with hand-written ONNX inference pipeline, PyTorch/ONNX consistency validated
+- **VLM Analysis (D3)**: Qwen-VL-Max generates 4-section structured reports (Scene / Inventory / Detector Gaps / Risk). Detection JSON injected into prompt to reduce hallucination; domain-gap awareness catches missed objects and false positives
+- **RAG Standards (D4)**: 6 inspection standards (BS EN 1992, ISO 45001, EN 13134, ISO 23953, ISO 14001, pedestrian safety) embedded via DashScope text-embedding-v2, stored in ChromaDB, retrieved per report
+
+## Verified Behaviors
+
+| Scenario | Detection | VLM Output | RAG Retrieval |
+|----------|-----------|------------|---------------|
+| Urban bus scene | 1 bus + 4 persons ✅ | Correct inventory, no gaps | Public transport + pedestrian standards |
+| Group photo (5 people) | 4 persons (missed 1) | Caught the missed 5th person | Pedestrian safety standard |
+| Aerial construction site | 3 false positives | Identified all as domain-gap errors | Construction safety + hazard thresholds |
 
 ## Quick Start
 
@@ -35,30 +43,39 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run detection
-python run_detection.py --model yolov8m.pt --source data/test_images/bus.jpg
+# Configure API key (Alibaba Cloud DashScope)
+echo "DASHSCOPE_API_KEY=sk-your-key" > .env
 
-# Compare PyTorch vs ONNX
-python compare_d1_d2.py
+# Run full pipeline (detection + VLM + RAG)
+python run_pipeline.py data/test_images/bus.jpg
+
+# Detection only
+python run_detection.py --model yolov8m.pt --source data/test_images/bus.jpg
 ```
 
 ## Tech Stack
 
-- **Python 3.12** | PyTorch 2.2.2 | Ultralytics 8.3 | ONNX Runtime 1.16
-- **Models**: YOLOv8m (53M params) for detection, Qwen2.5-VL for visual reasoning
+- **Python 3.12** | PyTorch 2.2.2 | Ultralytics 8.4 | ONNX Runtime 1.23
+- **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
+- **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
 - **Deployment**: FastAPI + Docker (planned)
 
 ## Project Structure
 
 ```
 ├── app/
-│   └── detection/
-│       └── detector.py      # YOLODetector class (PyTorch + ONNX)
-├── data/test_images/         # Sample inspection images
-├── export_onnx.py            # Export PyTorch model to ONNX
-├── run_detection.py          # Run detection on images
-├── compare_d1_d2.py          # Compare PyTorch vs ONNX outputs
-├── quick_test.py             # Quick environment validation
+│   ├── detection/
+│   │   └── detector.py      # YOLODetector (ONNX, letterbox + NMS)
+│   ├── vlm/
+│   │   └── client.py        # VLMClient (Qwen-VL-Max, image auto-resize)
+│   └── rag/
+│       └── retriever.py     # StandardsRetriever (embed + ChromaDB)
+├── data/
+│   ├── standards/           # 6 inspection standards (markdown)
+│   └── test_images/         # Sample inspection images
+├── run_pipeline.py          # Full pipeline: detect → VLM → RAG
+├── export_onnx.py           # Export PyTorch model to ONNX
+├── compare_d1_d2.py         # PyTorch vs ONNX consistency check
 └── requirements.txt
 ```
 
