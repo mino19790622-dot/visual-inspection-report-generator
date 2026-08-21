@@ -17,6 +17,7 @@ import uuid
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from app.agent.graph import InspectionAgent, _get_retriever
+from app.observability import log_request
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 UPLOAD_DIR = "uploads"
@@ -70,7 +71,7 @@ def inspect(image: UploadFile = File(...),
     """Run the full inspection agent on an uploaded image.
 
     Returns detection results, VLM report, risk level, matched standards,
-    and the agent's decision log.
+    the agent's decision log, and observability metrics (latency, tokens, cost).
     """
     path = _save_upload(image)
     try:
@@ -80,6 +81,10 @@ def inspect(image: UploadFile = File(...),
         raise HTTPException(status_code=500,
                             detail=f"Agent failed: {e}") from e
 
+    # structured observability log (one JSON line per request)
+    log_request(path, state)
+
+    usage = state.get("vlm_usage") or {}
     return {
         "image": image.filename,
         "detection": {
@@ -101,4 +106,8 @@ def inspect(image: UploadFile = File(...),
         ],
         "agent_decisions": state.get("decisions", []),
         "saved_files": state.get("saved", {}),
+        "metrics": {
+            "total_latency_ms": state.get("total_latency_ms"),
+            "vlm": usage,
+        },
     }

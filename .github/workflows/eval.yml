@@ -1,0 +1,61 @@
+name: eval
+
+# Golden-set evaluation gate for the VLM report quality.
+# Triggered manually (workflow_dispatch) so we control LLM cost.
+# Requires a DASHSCOPE_API_KEY repository secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      threshold:
+        description: "Overall score threshold (0-5 scale, default 3.7)"
+        required: false
+        default: "3.7"
+      only:
+        description: "Optional: only run this golden-set id (e.g. bus_street_side)"
+        required: false
+        default: ""
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install runtime + eval deps
+        run: |
+          python -m pip install --upgrade pip
+          # minimal: only what eval needs (no torch / ultralytics)
+          pip install openai python-dotenv chromadb requests
+
+      - name: Cache RAG index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/chroma
+          key: chroma-eval-${{ github.run_id }}
+          restore-keys: chroma-eval-
+
+      - name: Run golden-set evaluation
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+        run: |
+          mkdir -p reports/eval
+          ARGS="--threshold ${{ github.event.inputs.threshold || '3.7' }} --out reports/eval/ci-run.json"
+          if [ -n "${{ github.event.inputs.only }}" ]; then
+            ARGS="$ARGS --id ${{ github.event.inputs.only }}"
+          fi
+          python -m eval.run_eval $ARGS
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: reports/eval/ci-run.json

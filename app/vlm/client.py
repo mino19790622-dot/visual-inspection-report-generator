@@ -68,11 +68,21 @@ Based on your own visual analysis of the image, list objects or anomalies that t
 ### 4. Risk Assessment
 Given this is a visual inspection context, note any safety risks, structural concerns, or anomalies that warrant human review. Be specific and actionable. If low risk, state so clearly."""
 
-    def analyze(self, image_path: str, detection_result: dict) -> str:
-        """Send image + detection JSON to VLM, return structured report text."""
+    def analyze(self, image_path: str, detection_result: dict) -> dict:
+        """Send image + detection JSON to VLM, return structured result.
+
+        Returns:
+            {"report": str, "usage": {"prompt_tokens": int,
+                                       "completion_tokens": int,
+                                       "total_tokens": int,
+                                       "latency_ms": int,
+                                       "cost_rmb": float}}
+        """
+        import time
         image_data = self._encode_image(image_path)
         prompt = self._build_prompt(detection_result)
 
+        t0 = time.time()
         response = self.client.chat.completions.create(
             model=self.MODEL,
             messages=[
@@ -87,4 +97,32 @@ Given this is a visual inspection context, note any safety risks, structural con
             temperature=0,  # deterministic: inspection reports must be reproducible
             max_tokens=2000,
         )
-        return response.choices[0].message.content
+        latency_ms = int((time.time() - t0) * 1000)
+        usage = _extract_usage(response, latency_ms)
+        return {"report": response.choices[0].message.content, "usage": usage}
+
+
+# DashScope qwen-vl-max public pricing ≈ ¥0.02 per 1K tokens (input+output combined).
+# This is a rough estimate — actual cost depends on the current price list and
+# whether images are charged separately. Update _RMB_PER_1K_TOKENS if pricing changes.
+_RMB_PER_1K_TOKENS = 0.02
+
+
+def _extract_usage(response, latency_ms: int) -> dict:
+    """Pull token counts from the OpenAI-compatible response and estimate cost."""
+    prompt_tokens = 0
+    completion_tokens = 0
+    # OpenAI python client exposes usage on the response object
+    usage_obj = getattr(response, "usage", None)
+    if usage_obj is not None:
+        prompt_tokens = getattr(usage_obj, "prompt_tokens", 0) or 0
+        completion_tokens = getattr(usage_obj, "completion_tokens", 0) or 0
+    total = prompt_tokens + completion_tokens
+    cost_rmb = round(total / 1000 * _RMB_PER_1K_TOKENS, 6)
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total,
+        "latency_ms": latency_ms,
+        "cost_rmb": cost_rmb,
+    }

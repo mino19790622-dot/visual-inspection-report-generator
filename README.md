@@ -42,13 +42,14 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 
 ## Testing
 
-55 unit/integration tests (87% coverage), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
+58 unit/integration tests (85% coverage), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
 
 - `test_detection.py` — letterbox preprocessing, bbox decoding roundtrip, confidence filtering, NMS suppression/clipping
 - `test_agent.py` — risk classification (explicit statement vs keyword fallback, negation safety), routing logic, and a **full LangGraph run** verifying adaptive re-detection and risk-based retrieval depth
 - `test_rag.py` — chunking (header split / overlap / fragment filter) and retrieval against a real in-memory ChromaDB with deterministic hash embeddings
 - `test_api.py` — FastAPI `TestClient`: schema contract, 415/500 error paths, mocked agent
 - `test_exporter.py` — Markdown/JSON report content, graceful annotation failure
+- `test_observability.py` — structured JSONL log writer (incl. unwritable-dir fallback)
 
 ```bash
 pip install -r requirements-ci.txt
@@ -57,6 +58,39 @@ pytest --cov=app --cov-fail-under=80
 ```
 
 CI runs the same suite on every push/PR (`.github/workflows/ci.yml`).
+
+## Golden-Set Evaluation (MLOps quality gate)
+
+Beyond unit tests, the VLM's *output quality* is regression-tested against a hand-curated golden set:
+
+- `eval/golden_set/golden_set.json` — 10 images (street scenes + aerial construction / port / parking / beach) with expected detection counts, must-mention keywords, safety vocabulary, and a per-image rubric
+- `eval/judge.py` — LLM-as-judge using `qwen-turbo` scoring 4 dimensions (scene ID, safety, domain awareness, structure) 1–5 each
+- `eval/run_eval.py` — runs the full agent on each image (VLM cost: ~10 calls, fractions of a ¥) + judge, aggregates per-image and overall scores (0-5 scale), exits non-zero if below threshold
+
+```bash
+DASHSCOPE_API_KEY=... python -m eval.run_eval --threshold 3.7
+# skip the LLM judge (deterministic only, free):
+python -m eval.run_eval --skip-judge
+# one image at a time for quick iteration:
+python -m eval.run_eval --id bus_street_side
+```
+
+A separate `eval.yml` workflow lets you run this on demand from the Actions tab (avoids the LLM cost on every push). Baseline run on 10 images: **overall 4.28 / 5.0** (Feb 2026).
+
+## Observability
+
+Every `/inspect` call appends one JSON line to `logs/inspect.jsonl` (path overridable via `INSPECT_LOG_DIR`):
+
+```json
+{"ts":"2026-08-21T...","image":"abc.jpg","risk_level":"high",
+ "detection":{"object_count":3,"inference_ms":47},
+ "vlm":{"prompt_tokens":1200,"completion_tokens":350,"total_tokens":1550,
+        "latency_ms":1800,"cost_rmb":0.031},
+ "retrieval":{"top_k":5,"standards_count":5},
+ "total_latency_ms":2400,"saved":["report","annotated"]}
+```
+
+Cost is estimated at ¥0.02 / 1K tokens (qwen-vl-max public price); update `_RMB_PER_1K_TOKENS` in `app/vlm/client.py` if pricing changes.
 
 ## Quick Start
 ```bash
@@ -147,6 +181,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
 - **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
 - **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose; deployed live on AWS ECS Fargate + ECR (CI/CD via GitHub Actions OIDC)
+- **Quality**: pytest 58 tests (85% coverage, CI-gated) + LLM-as-judge golden-set eval (10 images, threshold-gated, manually triggered) + JSONL cost/latency observability on every `/inspect`
 
 ## Project Structure
 
@@ -164,6 +199,11 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │       └── graph.py         # LangGraph StateGraph (adaptive retry + risk routing)
 │   └── api/
 │       └── server.py        # FastAPI: POST /inspect, GET /standards, GET /health
+│   └── observability.py     # Structured JSONL logging (latency / tokens / cost)
+├── eval/                    # Golden-set + LLM-as-judge evaluation
+│   ├── golden_set/golden_set.json
+│   ├── judge.py             # qwen-turbo judge scoring 4 dimensions
+│   └── run_eval.py          # Eval runner (deterministic + judge, threshold gate)
 ├── data/
 │   ├── standards/           # 6 inspection standards (markdown)
 │   └── test_images/         # Sample inspection images
@@ -185,10 +225,11 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │   └── gh-oidc-*.json          # GitHub OIDC trust + permission policies
 ├── scripts/
 │   └── deploy.sh               # Build + push to ECR + deploy (local)
-├── tests/                      # pytest suite (55 tests, 87% coverage, no network)
+├── tests/                      # pytest suite (58 tests, 85% coverage, no network)
 ├── .github/workflows/
 │   ├── ci.yml                  # CI: ruff + pytest + coverage on push/PR
-│   └── deploy.yml              # CI: OIDC → ECR → App Runner on push to main
+│   ├── deploy.yml              # CI: OIDC → ECR → App Runner on push to main
+│   └── eval.yml                 # Manual: golden-set LLM-as-judge evaluation
 ├── Dockerfile / docker-compose.yml / .dockerignore
 └── requirements.txt / requirements.docker.txt / requirements-ci.txt
 ```

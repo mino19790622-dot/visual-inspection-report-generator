@@ -1,0 +1,132 @@
+[
+  {
+    "id": "bus_street_side",
+    "image": "data/test_images/bus.jpg",
+    "scene": "Street-level side view of a blue public bus stopped on a paved road, with several passengers (at least 2) standing at the door boarding/exiting.",
+    "expect": {
+      "risk_level": "medium",
+      "min_detections": 3,
+      "max_detections": 20,
+      "must_mention_any": ["bus", "passenger", "people", "stop"],
+      "should_flag_safety_concerns": true
+    },
+    "rubric": "Report should (1) identify the scene as a public bus at a stop, (2) acknowledge passengers boarding/alighting, (3) flag potential pedestrian safety concerns (people near road), (4) follow the 4-section structure exactly (Scene, Object Inventory, Detector Gaps, Risk Assessment)."
+  },
+  {
+    "id": "construction_foundation_aerial",
+    "image": "data/test_images/pexels-kelly-2833686.jpg",
+    "scene": "Aerial top-down view of a building under active construction: concrete foundation, exposed rebar, wooden forms, construction equipment (excavator, crane), surrounding dirt and a paved road.",
+    "expect": {
+      "risk_level": "high",
+      "min_detections": 0,
+      "max_detections": 10,
+      "must_mention_any": ["construction", "site", "building", "foundation", "aerial", "equipment"],
+      "should_flag_safety_concerns": true
+    },
+    "rubric": "Report should (1) identify the overhead/aerial view, (2) describe an active construction site, (3) explicitly mention safety hazards typical of construction: open foundation, exposed rebar, heavy equipment, fall risk, (4) note that the aerial perspective causes a domain gap for the COCO-trained detector (small objects, top-down view not in training data), (5) classify risk as high."
+  },
+  {
+    "id": "large_building_aerial",
+    "image": "data/test_images/pexels-greece-china-news-81838757-25461690.jpg",
+    "scene": "Aerial top-down view of a very large rectangular building with white/grey roof panels, surrounded by ongoing construction work (debris, scaffolding, dirt).",
+    "expect": {
+      "risk_level": "medium",
+      "min_detections": 0,
+      "max_detections": 5,
+      "must_mention_any": ["building", "roof", "construction", "aerial"],
+      "should_flag_safety_concerns": true
+    },
+    "rubric": "Report should (1) recognize the large building footprint from aerial view, (2) note ongoing construction activity around it, (3) acknowledge domain gap (top-down roof view unlikely to match COCO classes), (4) flag any debris or unfinished sections as safety concerns, (5) classify risk as medium-to-high."
+  },
+  {
+    "id": "marina_aerial",
+    "image": "data/test_images/pexels-ahmetkurt-13838362.jpg",
+    "scene": "Aerial view of a marina with dozens of boats (yachts and small craft) docked in slips along piers, surrounded by dark blue water and a stone breakwater.",
+    "expect": {
+      "risk_level": "low",
+      "min_detections": 0,
+      "max_detections": 5,
+      "must_mention_any": ["marina", "boat", "water", "dock", "yacht", "harbor"],
+      "should_flag_safety_concerns": false
+    },
+    "rubric": "Report should (1) identify the marina / boat dock scene, (2) note the many boats, (3) explain the domain gap: boats at this top-down angle and scale are likely missed by COCO detector, (4) classify risk as low (no immediate hazards in this well-organized static view), (5) do not fabricate hazard detections."
+  },
+  {
+    "id": "industrial_red_soil",
+    "image": "data/test_images/pexels-pok-rie-33563-12758027.jpg",
+    "scene": "Aerial view of an industrial site on red/orange soil with several trucks (dump trucks, tankers), construction materials, and tire tracks.",
+    "expect": {
+      "risk_level": "high",
+      "min_detections": 1,
+      "max_detections": 15,
+      "must_mention_any": ["truck", "construction", "industrial", "site", "equipment", "machinery"],
+      "should_flag_safety_concerns": true
+    },
+    "rubric": "Report should (1) identify the industrial / construction site, (2) note the trucks and heavy equipment, (3) flag safety concerns: unpaved soft ground (tip-over risk), equipment operating near workers, dust, (4) classify risk as high."
+  },
+  {
+    "id": "children_group",
+    "image": "data/test_images/pexels-airamdphoto-16018067.jpg",
+    "scene": "Front view of a group of children (about 5-6) standing in front of a large tree outdoors in daylight.",
+    "expect": {
+      "risk_level": "medium",
+      "min_detections": 4,
+      "max_detections": 20,
+      "must_mention_any": ["children", "people", "group", "outdoor", "tree"],
+      "should_flag_safety_concerns": true
+    },
+    "rubric": "Report should (1) identify children / young people in an outdoor setting, (2) acknowledge the detector likely reported them as 'person' class, (3) flag supervision/safety considerations for children, (4) classify risk as medium (no immediate hazard but vulnerable subjects)."
+  },
+  {
+    "id": "parking_lot_aerial",
+    "image": "data/test_images/pexels-frentescuphotography-15022471.jpg",
+    "scene": "Aerial top-down view of a parking lot with rows of parked cars, painted lane markings, and a few trees.",
+    "expect": {
+      "risk_level": "low",
+      "min_detections": 5,
+      "max_detections": 100,
+      "must_mention_any": ["parking", "car", "vehicle", "lot"],
+      "should_flag_safety_concerns": false
+    },
+    "rubric": "Report should (1) identify the parking lot scene, (2) note the many cars detected, (3) explain that the top-down view is a domain gap but cars in side-view would be detected well, (4) classify risk as low (static, organized, no hazards visible)."
+  },
+  {
+    "id": "port_construction",
+    "image": "data/test_images/pexels-introspectivedsgn-8826934.jpg",
+    "scene": "Aerial view of a port/harbor with construction cranes, partially built structures, and water in the background.",
+    "expect": {
+      "risk_level": "high",
+      "min_detections": 0,
+      "max_detections": 8,
+      "must_mention_any": ["port", "crane", "construction", "harbor", "water"],
+      "should_flag_safety_concerns": true
+    },
+    "rubric": "Report should (1) identify port/harbor with construction activity, (2) note the cranes and partially built infrastructure, (3) flag safety concerns (heavy lifting, working near water, incomplete structures), (4) classify risk as high."
+  },
+  {
+    "id": "industrial_lot_aerial",
+    "image": "data/test_images/pexels-pok-rie-33563-1188553.jpg",
+    "scene": "Aerial view of an industrial site with construction equipment, debris, dirt, and scattered materials.",
+    "expect": {
+      "risk_level": "high",
+      "min_detections": 0,
+      "max_detections": 8,
+      "must_mention_any": ["industrial", "construction", "site", "equipment", "debris", "machinery"],
+      "should_flag_safety_concerns": true
+    },
+    "rubric": "Report should (1) identify the industrial/construction site, (2) note scattered materials and equipment, (3) flag safety concerns (unorganized site, trip hazards, heavy equipment), (4) classify risk as high."
+  },
+  {
+    "id": "beach_walkers",
+    "image": "data/test_images/pexels-kampus-8777879.jpg",
+    "scene": "Beach/coastal view with 3 people walking on wet sand near the water's edge in daylight.",
+    "expect": {
+      "risk_level": "low",
+      "min_detections": 2,
+      "max_detections": 10,
+      "must_mention_any": ["beach", "people", "water", "walking", "coastal"],
+      "should_flag_safety_concerns": false
+    },
+    "rubric": "Report should (1) identify the beach/coastal scene with people, (2) note 3 persons walking, (3) optionally mention tidal/slip risks (low), (4) classify risk as low."
+  }
+]

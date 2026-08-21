@@ -28,3 +28,4 @@ uploads/
 coverage.xml
 .pytest_cache/
 .ruff_cache/
+logs/

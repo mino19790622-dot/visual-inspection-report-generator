@@ -92,9 +92,14 @@ class _FakeDetector:
 
 class _FakeVLM:
     def analyze(self, image_path, det_result):
-        return ("### 1. Scene Description\nA construction site.\n"
-                "### 4. Risk Assessment\nOverall high risk: unsecured "
-                "scaffolding and workers without helmets.")
+        return {
+            "report": ("### 1. Scene Description\nA construction site.\n"
+                       "### 4. Risk Assessment\nOverall high risk: unsecured "
+                       "scaffolding and workers without helmets."),
+            "usage": {"prompt_tokens": 100, "completion_tokens": 50,
+                      "total_tokens": 150, "latency_ms": 800,
+                      "cost_rmb": 0.003},
+        }
 
 
 class _FakeRetriever:

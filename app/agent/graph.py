@@ -14,6 +14,7 @@ Decision logic:
 """
 
 import re
+import time
 from functools import lru_cache
 from typing import TypedDict
 
@@ -31,6 +32,7 @@ class AgentState(TypedDict, total=False):
     retry_count: int
     det_result: dict
     vlm_report: str
+    vlm_usage: dict  # token counts + cost + latency for the LLM call
     risk_level: str
     top_k: int
     standards: list
@@ -38,6 +40,7 @@ class AgentState(TypedDict, total=False):
     saved: dict
     save: bool
     save_dir: str
+    total_latency_ms: int  # end-to-end pipeline time, set in export_node
 
 
 # ---------- expensive resources: build once, reuse across runs ----------
@@ -98,8 +101,8 @@ def lower_threshold_node(state: AgentState) -> dict:
 def analyze_node(state: AgentState) -> dict:
     print("  [agent] VLM analysis")
     vlm = _get_vlm()
-    report = vlm.analyze(state["image_path"], state["det_result"])
-    return {"vlm_report": report}
+    result = vlm.analyze(state["image_path"], state["det_result"])
+    return {"vlm_report": result["report"], "vlm_usage": result["usage"]}
 
 
 def assess_risk_node(state: AgentState) -> dict:
@@ -140,8 +143,10 @@ def retrieve_node(state: AgentState) -> dict:
 
 
 def export_node(state: AgentState) -> dict:
+    t_start = state.get("_t_start")
+    total_ms = int((time.time() - t_start) * 1000) if t_start else 0
     if not state.get("save", True):
-        return {"saved": {}}
+        return {"saved": {}, "total_latency_ms": total_ms}
     detector = _get_detector("yolov8m.onnx")
     exporter = ReportExporter(state.get("save_dir", "reports"))
     saved = exporter.export(
@@ -151,7 +156,7 @@ def export_node(state: AgentState) -> dict:
     )
     for kind, path in saved.items():
         print(f"  [agent] saved [{kind}] {path}")
-    return {"saved": saved}
+    return {"saved": saved, "total_latency_ms": total_ms}
 
 
 # ---------------------------- routing ---------------------------- #
@@ -201,6 +206,7 @@ class InspectionAgent:
             "decisions": [],
             "save": save,
             "save_dir": save_dir,
+            "_t_start": time.time(),
         }
         final = self.graph.invoke(initial, config={"recursion_limit": 15})
         return final
