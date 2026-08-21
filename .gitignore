@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# Model weights (too large for GitHub, download separately)
+*.pt
+*.onnx
+
+# Output images (can be regenerated)
+out_*.jpg
+output_img/
+
+# Misc
+.dist/
+.env
