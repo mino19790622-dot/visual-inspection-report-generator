@@ -1,0 +1,37 @@
+name: debug-oidc
+
+# Temporary diagnostic workflow: checks whether the AWS_ROLE_ARN secret
+# matches the expected role ARN, and tests OIDC assume with the known-good
+# ARN. Safe to delete after the issue is resolved.
+
+on: workflow_dispatch
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secret value (masked, length only)
+        env:
+          EXPECTED: arn:aws:iam::190944420576:role/github-actions-deploy
+          ACTUAL: ${{ secrets.AWS_ROLE_ARN }}
+        run: |
+          echo "secret length: ${#ACTUAL} (expected 52)"
+          if [ "$ACTUAL" = "$EXPECTED" ]; then
+            echo "SECRET MATCHES expected ARN"
+          else
+            echo "SECRET DOES NOT MATCH expected ARN"
+            echo "actual prefix: ${ACTUAL%%:*}..."
+          fi
+
+      - name: Test OIDC assume with known-good ARN
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::190944420576:role/github-actions-deploy
+          aws-region: eu-west-1
+
+      - name: Who am I
+        run: aws sts get-caller-identity
