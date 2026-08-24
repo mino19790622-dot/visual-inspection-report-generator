@@ -27,8 +27,11 @@ def run(image_path: str, onnx_path: str = "yolov8m.onnx",
     # --- Step 2: VLM Analysis ---
     print(f"\n[2/3] Calling Qwen-VL-Max for structured analysis...")
     vlm = VLMClient()
-    report = vlm.analyze(image_path, det_result)
-    print(f"  VLM report generated ({len(report)} chars)")
+    result = vlm.analyze(image_path, det_result)
+    report = result["report"]
+    usage = result["usage"]
+    print(f"  VLM report generated ({len(report)} chars); "
+          f"tokens={usage['total_tokens']}, cost=¥{usage['cost_rmb']:.4f}")
 
     # --- Step 3: RAG Standards Retrieval ---
     print(f"\n[3/3] Retrieving applicable inspection standards...")
