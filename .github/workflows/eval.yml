@@ -1,20 +1,41 @@
 name: eval
 
-# Golden-set evaluation gate for the VLM report quality.
-# Triggered manually (workflow_dispatch) so we control LLM cost.
-# Requires a DASHSCOPE_API_KEY repository secret.
+# LLM-costing evaluation workflows, triggered manually (workflow_dispatch) so we
+# control cost. Two modes:
+#   eval     — golden-set quality gate (VLM narrative + LLM judge, threshold-gated)
+#   ablation — 3-arm tool-calling ablation (off / fixed / agentic), eval/ablation_topk.py
+# Requires the DASHSCOPE_API_KEY repository secret.
+#
+# NOTE: this workflow is dispatchable pre-merge because it already exists on the
+# default branch. A brand-new workflow file (e.g. a standalone ablation.yml) is
+# NOT workflow_dispatch-able until it lands on the default branch, so the
+# ablation runner lives here instead of in its own file.
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "eval = golden-set quality gate; ablation = 3-arm tool-calling comparison"
+        type: choice
+        options: ["eval", "ablation"]
+        default: "eval"
+        required: true
       threshold:
-        description: "Overall score threshold (0-5 scale, default 3.7)"
+        description: "Overall score threshold (0-5 scale, default 3.7). PROVISIONAL — a starting gate, not a calibrated threshold; judge credibility (incl. self-enhancement bias, judge + model both Qwen-family) is validated in phase B."
         required: false
         default: "3.7"
       only:
         description: "Optional: only run this golden-set id (e.g. bus_street_side)"
         required: false
         default: ""
+      arms:
+        description: "(ablation mode) arms to run, space-separated: off fixed agentic"
+        required: false
+        default: "off fixed agentic"
+      judge:
+        description: "(ablation mode) also LLM-judge the narrative (extra cost): true/false"
+        required: false
+        default: "false"
 
 permissions:
   id-token: write      # required for OIDC -> AWS (S3 model download)
@@ -25,9 +46,9 @@ env:
   MODEL_S3_URI: s3://visual-inspection-models-190944420576/yolov8m.onnx
 
 jobs:
-  eval:
+  evaluate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -49,8 +70,6 @@ jobs:
       - name: Install runtime + eval deps
         run: |
           python -m pip install --upgrade pip
-          # requirements-ci.txt mirrors runtime deps minus torch/ultralytics;
-          # the ONNX runtime + langgraph are needed by the full eval pipeline.
           pip install -r requirements-ci.txt requests
 
       - name: Cache RAG index
@@ -61,6 +80,7 @@ jobs:
           restore-keys: chroma-eval-
 
       - name: Run golden-set evaluation
+        if: ${{ github.event.inputs.mode != 'ablation' }}
         env:
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         run: |
@@ -71,9 +91,24 @@ jobs:
           fi
           python -m eval.run_eval $ARGS
 
-      - name: Upload eval report
+      - name: Run 3-arm ablation
+        if: ${{ github.event.inputs.mode == 'ablation' }}
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+        run: |
+          mkdir -p reports/ablation
+          ARGS="--arms ${{ github.event.inputs.arms }}"
+          if [ "${{ github.event.inputs.judge }}" = "true" ]; then
+            ARGS="$ARGS --judge"
+          fi
+          python -m eval.ablation_topk $ARGS --out reports/ablation/ci-run.json
+
+      - name: Upload eval artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-report
-          path: reports/eval/ci-run.json
+          name: eval-artifacts
+          path: |
+            reports/eval/ci-run.json
+            reports/ablation/ci-run.json
+          if-no-files-found: ignore

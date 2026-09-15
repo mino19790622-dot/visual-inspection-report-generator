@@ -38,9 +38,10 @@ def test_exports_markdown_and_json(tmp_path):
     assert "| person | 1 |" in md
     assert "## 2. VLM Analysis" in md
     assert "Sample VLM report text." in md
-    assert "## 3. Applicable Standards (RAG)" in md
+    assert "## 3. Grounded Findings" in md
+    assert "## 4. Applicable Standards (RAG)" in md
     assert "Construction Site Safety" in md
-    assert "## 4. Agent Decisions" in md
+    assert "## 5. Agent Decisions" in md
     assert "lowering threshold" in md
 
     payload = json.load(open(saved["json"], encoding="utf-8"))
@@ -91,3 +92,78 @@ def test_empty_detection_summary(tmp_path):
     saved = exporter.export("test.jpg", empty_det, "Report.", STANDARDS)
     md = open(saved["markdown"], encoding="utf-8").read()
     assert "No objects detected above threshold." in md
+
+
+# ------------------------------------------------------------------ v2
+def _grounded():
+    from app.grounding import Citation, Finding, GroundedReport
+    return GroundedReport(
+        findings=[Finding(
+            id="f1", severity="high", description="Unsecured scaffolding.",
+            citation=Citation(chunk_id="construction_site_safety.md::1",
+                              standard="Construction Site Safety",
+                              quote="Workers must wear helmets"),
+            citation_status="ok", citation_reason="quote match 1.00")],
+        unresolved=["Standing water of unknown depth"],
+        tool_calls=[{"tool": "retrieve_standards",
+                     "args": {"query": "scaffolding", "k": 2}, "n_results": 2}],
+        retrieved=STANDARDS, rounds=2, mode="agentic",
+        citation_report={"counts": {"ok": 1, "unresolved": 0,
+                                    "hallucinated": 0},
+                         "total_findings": 1,
+                         "attribution_pass_rate": 1.0, "detail": []})
+
+
+def test_grounded_findings_render_with_status(tmp_path):
+    """A finding's verification status must be visible in the report."""
+    exporter = ReportExporter(out_dir=str(tmp_path / "reports"))
+    saved = exporter.export("test.jpg", DET, "Report.", STANDARDS,
+                            grounded=_grounded())
+    md = open(saved["markdown"], encoding="utf-8").read()
+    assert "| 1 | high | Unsecured scaffolding. |" in md
+    assert "`construction_site_safety.md::1`" in md
+    assert "| ok |" in md
+    assert "Standing water of unknown depth" in md
+
+    payload = json.load(open(saved["json"], encoding="utf-8"))
+    assert payload["grounded"]["findings"][0]["id"] == "f1"
+    assert payload["grounded"]["citation_report"]["attribution_pass_rate"] == 1.0
+
+
+def test_unverified_finding_is_printed_not_dropped(tmp_path):
+    """Downgrading must stay visible — silence would hide the failure."""
+    from app.grounding import Citation, Finding, GroundedReport
+    grounded = GroundedReport(
+        findings=[Finding(id="f1", severity="low", description="Invented claim.",
+                          citation=Citation(chunk_id="nowhere.md::9",
+                                            quote="made up"),
+                          citation_status="hallucinated")],
+        retrieved=[], mode="agentic",
+        citation_report={"counts": {"ok": 0, "unresolved": 0,
+                                    "hallucinated": 1},
+                         "total_findings": 1,
+                         "attribution_pass_rate": 0.0, "detail": []})
+    exporter = ReportExporter(out_dir=str(tmp_path / "reports"))
+    saved = exporter.export("test.jpg", DET, "Report.", STANDARDS,
+                            grounded=grounded)
+    md = open(saved["markdown"], encoding="utf-8").read()
+    assert "hallucinated" in md
+
+
+def test_parse_failure_is_stated_in_report(tmp_path):
+    from app.grounding import GroundedReport
+    grounded = GroundedReport(parse_failed=True, mode="agentic",
+                              failure_reason="model returned no tool call")
+    exporter = ReportExporter(out_dir=str(tmp_path / "reports"))
+    saved = exporter.export("test.jpg", DET, "Report.", STANDARDS,
+                            grounded=grounded)
+    md = open(saved["markdown"], encoding="utf-8").read()
+    assert "failed to produce structured findings" in md
+
+
+def test_no_grounded_output_when_stage_absent(tmp_path):
+    exporter = ReportExporter(out_dir=str(tmp_path / "reports"))
+    saved = exporter.export("test.jpg", DET, "Report.", STANDARDS)
+    md = open(saved["markdown"], encoding="utf-8").read()
+    assert "No grounded findings." in md
+    assert "grounded" not in json.load(open(saved["json"], encoding="utf-8"))

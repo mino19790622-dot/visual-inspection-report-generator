@@ -9,9 +9,11 @@ from app.agent.graph import (
     InspectionAgent,
     _classify_risk,
     build_graph,
+    ground_node,
     lower_threshold_node,
     review_detections,
 )
+from app.grounding import Citation, Finding, GroundedReport
 
 
 # ---------------------------- risk classification ---------------------------- #
@@ -108,9 +110,38 @@ class _FakeRetriever:
 
     def retrieve(self, query, k=3):
         self.last_k = k
-        return [{"text": f"standard excerpt #{i}", "standard": f"Std {i}",
-                 "source": f"std_{i}.md", "distance": 0.1 * (i + 1)}
+        return [{"chunk_id": f"std_{i}.md::{i}", "text": f"standard excerpt #{i}",
+                 "standard": f"Std {i}", "source": f"std_{i}.md",
+                 "distance": 0.1 * (i + 1)}
                 for i in range(k)]
+
+
+class _FakeGroundingAgent:
+    """Stands in for the tool-calling agent (never touches the network)."""
+
+    model = "fake-grounding-model"
+    runs: list[dict] = []
+
+    def __init__(self, retriever, **kwargs):
+        self.retriever = retriever
+
+    def run(self, narrative, detection_summary="", mode="agentic", **kwargs):
+        _FakeGroundingAgent.runs.append({"mode": mode, "narrative": narrative})
+        chunks = self.retriever.retrieve("grounding query", k=2)
+        return GroundedReport(
+            findings=[Finding(id="f1", severity="high",
+                              description="Unsecured scaffolding.",
+                              citation=Citation(chunk_id=chunks[0]["chunk_id"],
+                                                quote="standard excerpt #0"))],
+            unresolved=[], tool_calls=[{"tool": "retrieve_standards",
+                                        "args": {"query": "q", "k": 2},
+                                        "n_results": 2}],
+            retrieved=chunks, rounds=2, mode=mode,
+            citation_report={"counts": {"ok": 1, "unresolved": 0,
+                                        "hallucinated": 0},
+                             "total_findings": 1, "attribution_pass_rate": 1.0,
+                             "detail": []})
+
 
 
 @pytest.fixture
@@ -129,6 +160,8 @@ def mocks(monkeypatch, tmp_path):
     monkeypatch.setattr(graph, "_get_detector", lambda path: det)
     monkeypatch.setattr(graph, "_get_vlm", lambda: vlm)
     monkeypatch.setattr(graph, "_get_retriever", lambda: retriever)
+    monkeypatch.setattr(graph, "GroundingAgent", _FakeGroundingAgent)
+    _FakeGroundingAgent.runs = []
     return det, retriever
 
 
@@ -143,14 +176,22 @@ def test_full_flow_adaptive_retry_and_risk_depth(mocks, tmp_path):
     assert state["retry_count"] == 1
     assert any("lowering threshold" in d for d in state["decisions"])
 
-    # high-risk report -> retrieval depth 5 (not the default 3)
+    # risk is still classified from the narrative (used for routing/audit)
     assert state["risk_level"] == "high"
-    assert retriever.last_k == 5
-    assert len(state["standards"]) == 5
+
+    # ...but retrieval depth is now chosen by the grounding agent, not by a
+    # hard-coded risk->k dict
+    assert state["grounded"].mode == "agentic"
+    assert state["top_k"] == 2
+    assert len(state["standards"]) == 2
 
     # detection result comes from the (successful) second pass
     assert state["det_result"]["counts"] == {"person": 2}
     assert state["vlm_report"].startswith("### 1. Scene Description")
+
+    # findings came back with a verified citation
+    assert len(state["grounded"].findings) == 1
+    assert state["grounded"].citation_report["counts"]["ok"] == 1
 
 
 def test_full_flow_no_retry_when_objects_found(mocks, monkeypatch, tmp_path):
@@ -170,3 +211,54 @@ def test_full_flow_no_retry_when_objects_found(mocks, monkeypatch, tmp_path):
 def test_build_graph_compiles():
     compiled = build_graph()
     assert compiled is not None
+
+
+# ---------------------------- grounding stage ---------------------------- #
+class TestGroundingNode:
+    def test_mode_is_passed_through(self, mocks, monkeypatch):
+        _det, _retriever = mocks
+        state = {"vlm_report": "### 4. Risk Assessment\nhigh risk",
+                 "det_result": {"counts": {"person": 2}},
+                 "decisions": [], "grounding_mode": "fixed"}
+        out = ground_node(state)
+        assert out["grounded"].mode == "fixed"
+        assert _FakeGroundingAgent.runs[-1]["mode"] == "fixed"
+
+    def test_grounding_decision_is_logged(self, mocks, monkeypatch):
+        _det, _retriever = mocks
+        state = {"vlm_report": "narrative", "det_result": {"counts": {}},
+                 "decisions": []}
+        out = ground_node(state)
+        assert any("Grounding (agentic): 1 findings" in d for d in out["decisions"])
+        assert "1 citations verified" in out["decisions"][-1]
+
+    def test_parse_failure_is_surfaced_in_decisions(self, mocks, monkeypatch):
+        _det, _retriever = mocks
+
+        class Failing(_FakeGroundingAgent):
+            def run(self, *a, **kw):
+                return GroundedReport(parse_failed=True, mode="agentic",
+                                      failure_reason="model returned no tool call")
+
+        monkeypatch.setattr(graph, "GroundingAgent", Failing)
+        out = ground_node({"vlm_report": "n", "det_result": {"counts": {}},
+                           "decisions": []})
+        assert out["grounded"].parse_failed is True
+        assert "PARSE FAILED" in out["decisions"][-1]
+
+    def test_standards_reflect_what_was_retrieved(self, mocks, monkeypatch):
+        _det, _retriever = mocks
+        out = ground_node({"vlm_report": "n", "det_result": {"counts": {}},
+                           "decisions": []})
+        assert out["standards"] == out["grounded"].retrieved
+
+    def test_end_to_end_with_trace_enabled(self, mocks, tmp_path, monkeypatch):
+        """Tracing must not change the result, only add observability."""
+        _det, _retriever = mocks
+        monkeypatch.setenv("INSPECT_LOG_DIR", str(tmp_path))
+        state = InspectionAgent().run("img.jpg", save=False,
+                                      save_dir=str(tmp_path), trace=True)
+        assert state["grounded"] is not None
+        log = tmp_path / "inspect_spans.jsonl"
+        assert log.exists()
+
