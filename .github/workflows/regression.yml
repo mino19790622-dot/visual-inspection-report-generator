@@ -36,13 +36,12 @@ jobs:
       - name: Deterministic regression tests (no LLM, all mocked)
         # A fake key is supplied only because a few modules read it at import;
         # no network call is made — the ONNX session, DashScope embeddings and
-        # Qwen calls are all mocked at the module boundary.
+        # Qwen calls are all mocked at the module boundary. The whole suite is
+        # deterministic, so we run it all (new tests auto-join the gate).
+        # Focused sub-suites: citation checks, retrieval chunk_id stability,
+        # tool registry clamping, redaction, spans, ablation aggregation.
         env:
           DASHSCOPE_API_KEY: sk-ci-placeholder
         run: |
           pytest -q \
-            tests/test_citations.py tests/test_tools.py tests/test_grounding.py \
-            tests/test_log_redaction.py tests/test_spans.py tests/test_rag.py \
-            tests/test_agent.py tests/test_exporter.py tests/test_observability.py \
-            tests/test_detection.py tests/test_vlm.py tests/test_api.py \
             --cov=app --cov-report=term --cov-fail-under=80

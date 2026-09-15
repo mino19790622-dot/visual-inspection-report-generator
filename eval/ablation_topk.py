@@ -90,13 +90,13 @@ def _collect_arm(agent: InspectionAgent, item: dict, mode: str,
     det = state.get("det_result") or {}
     report = state.get("vlm_report", "")
 
-    det_score, failures = _deterministic_checks(state, item, report)
+    det_score, failures = _deterministic_checks(state, item["expect"], report)
     rec: dict[str, object] = {
         "id": item["id"],
         "arm": mode,
         "elapsed_s": round(elapsed, 2),
         "detection_count": sum(det.get("counts", {}).values()),
-        "deterministic_pass": bool(failures == 0),
+        "deterministic_pass": not failures,
         "deterministic_score": round(det_score, 3),
     }
 
@@ -120,7 +120,8 @@ def _collect_arm(agent: InspectionAgent, item: dict, mode: str,
         "findings": len(grounded.findings),
         "citation_counts": counts,
         "attribution_pass_rate": cit.get("attribution_pass_rate"),
-        "retrieval_calls": grounded.calls_used,
+        "retrieval_calls": sum(1 for c in grounded.tool_calls
+                               if c.get("tool") == "retrieve_standards"),
         "k_values": [c.get("args", {}).get("k")
                      for c in grounded.tool_calls
                      if c.get("tool") == "retrieve_standards"],
@@ -150,32 +151,42 @@ def _judge(image_path: Path, report: str, rubric: str) -> float | None:
 
 
 def _aggregate(records: list[dict]) -> dict:
-    """Per-arm aggregate. `records` are the per-image rows for one arm."""
-    n = len(records)
-    total_findings = sum(r["findings"] for r in records)
+    """Per-arm aggregate. `records` are the per-image rows for one arm.
+
+    Rows with an ``error`` key are excluded from the averages (but listed), so a
+    single failing image cannot crash the whole ablation run or silently skew it.
+    """
+    ok_records = [r for r in records if "error" not in r]
+    errors = [{"id": r.get("id"), "error": r.get("error")}
+              for r in records if "error" in r]
+    n = len(ok_records)
+    total_findings = sum(r.get("findings", 0) for r in ok_records)
     cit = {"ok": 0, "unresolved": 0, "hallucinated": 0}
-    for r in records:
+    for r in ok_records:
         cc = r.get("citation_counts") or {}
         for k in cit:
             cit[k] += cc.get(k, 0)
     ok = cit["ok"]
     apr = (ok / total_findings) if total_findings else None
-    calls = [r["retrieval_calls"] for r in records]
-    kvals = [k for r in records for k in (r.get("k_values") or [])]
-    det_pass = sum(1 for r in records if r["deterministic_pass"])
-    judges = [r["judge_score"] for r in records if r.get("judge_score") is not None]
+    calls = [r.get("retrieval_calls", 0) for r in ok_records]
+    kvals = [k for r in ok_records for k in (r.get("k_values") or [])]
+    det_pass = sum(1 for r in ok_records if r.get("deterministic_pass"))
+    judges = [r["judge_score"] for r in ok_records
+              if r.get("judge_score") is not None]
     return {
         "images": n,
+        "errors": errors,
         "total_findings": total_findings,
         "citation_counts": cit,
         "attribution_pass_rate": round(apr, 4) if apr is not None else None,
         "retrieval_calls_total": sum(calls),
         "retrieval_calls_mean": round(sum(calls) / n, 3) if n else None,
         "k_values": kvals,
-        "k_max": max((r.get("k_max") or 0) for r in records),
+        "k_max": max((r.get("k_max") or 0) for r in ok_records) if ok_records else 0,
         "deterministic_pass_rate": round(det_pass / n, 4) if n else None,
-        "vlm_tokens_total": sum(r["vlm_tokens"] for r in records),
-        "grounding_tokens_total": sum(r["grounding_tokens"] for r in records),
+        "vlm_tokens_total": sum(r.get("vlm_tokens", 0) for r in ok_records),
+        "grounding_tokens_total": sum(r.get("grounding_tokens", 0)
+                                      for r in ok_records),
         "mean_judge": round(sum(judges) / len(judges), 3) if judges else None,
     }
 
