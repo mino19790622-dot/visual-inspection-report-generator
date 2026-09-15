@@ -80,10 +80,12 @@ def _judge_score(judge_result: dict) -> float:
 
 
 def evaluate_one(agent: InspectionAgent, item: dict,
-                 skip_judge: bool = False) -> dict:
+                 skip_judge: bool = False,
+                 grounding_mode: str = "agentic") -> dict:
     image_path = ROOT / item["image"]
     t0 = time.time()
-    state = agent.run(str(image_path), save=False)
+    state = agent.run(str(image_path), save=False,
+                      grounding_mode=grounding_mode)
     elapsed = time.time() - t0
     report = state.get("vlm_report", "")
     det_score, failures = _deterministic_checks(
@@ -95,6 +97,7 @@ def evaluate_one(agent: InspectionAgent, item: dict,
         judge_result = judge(str(image_path), report, item["rubric"])
         judge_avg = _judge_score(judge_result)  # 0–5
     score = 5 * DET_WEIGHT * det_score + JUDGE_WEIGHT * judge_avg  # 0–5
+    grounded = state.get("grounded")
     return {
         "id": item["id"],
         "image": item["image"],
@@ -108,6 +111,15 @@ def evaluate_one(agent: InspectionAgent, item: dict,
         "detection_count": sum(
             (state.get("det_result") or {}).get("counts", {}).values()
         ),
+        "grounding": None if grounded is None else {
+            "mode": grounded.mode,
+            "findings": len(grounded.findings),
+            "tool_calls": len(grounded.tool_calls),
+            "citation_counts": (grounded.citation_report or {}).get("counts"),
+            "attribution_pass_rate": (grounded.citation_report or {}).get(
+                "attribution_pass_rate"),
+            "parse_failed": grounded.parse_failed,
+        },
     }
 
 
@@ -118,6 +130,14 @@ def main() -> int:
                     help=f"overall score threshold (default {DEFAULT_THRESHOLD})")
     ap.add_argument("--skip-judge", action="store_true",
                     help="only run deterministic checks (no LLM cost)")
+    ap.add_argument("--grounding-mode", default="agentic",
+                    choices=["agentic", "fixed", "off"],
+                    help="grounding stage mode. 'off' reproduces the v1.0 "
+                         "pipeline exactly (no tool calls, no LLM grounding "
+                         "cost) — use it as the regression baseline when "
+                         "checking whether a pipeline change broke the "
+                         "narrative. 'fixed' is the control arm of the "
+                         "dynamic-vs-fixed top-k experiment.")
     ap.add_argument("--out", help="write JSON report to this path")
     args = ap.parse_args()
 
@@ -129,7 +149,8 @@ def main() -> int:
             return 2
 
     print(f"Running evaluation on {len(items)} image(s); threshold={args.threshold}; "
-          f"judge={'on' if not args.skip_judge else 'OFF (deterministic only)'}\n")
+          f"judge={'on' if not args.skip_judge else 'OFF (deterministic only)'}; "
+          f"grounding={args.grounding_mode}\n")
 
     # build agent once; detector & retriever are cached via lru_cache
     print("Loading agent (this triggers RAG index build if first run)...\n")
@@ -140,7 +161,8 @@ def main() -> int:
     for i, item in enumerate(items, 1):
         print(f"[{i}/{len(items)}] {item['id']}  ({item['image']})")
         try:
-            r = evaluate_one(agent, item, skip_judge=args.skip_judge)
+            r = evaluate_one(agent, item, skip_judge=args.skip_judge,
+                             grounding_mode=args.grounding_mode)
         except Exception as e:
             print(f"  ERROR: {e}")
             r = {"id": item["id"], "image": item["image"], "error": str(e),
@@ -176,12 +198,31 @@ def main() -> int:
           f"({len(results)} images, judge={'on' if not args.skip_judge else 'off'})")
     print("=" * 64)
 
+    # Grounding summary — only meaningful when the stage actually ran.
+    runs = [r.get("grounding") for r in results if r.get("grounding")]
+    if runs:
+        n_findings = sum(g["findings"] for g in runs)
+        n_calls = sum(g["tool_calls"] for g in runs)
+        n_failed = sum(1 for g in runs if g["parse_failed"])
+        counts: dict[str, int] = {}
+        for g in runs:
+            for status, n in (g["citation_counts"] or {}).items():
+                counts[status] = counts.get(status, 0) + n
+        print(f"GROUNDING ({args.grounding_mode}): {n_findings} findings, "
+              f"{n_calls} tool calls, {n_failed} parse failures")
+        print(f"  citation status: {counts}")
+        print("=" * 64)
+    elif args.grounding_mode == "off":
+        print("GROUNDING: disabled (mode=off) — narrative-only regression run")
+        print("=" * 64)
+
     if args.out:
         os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump({
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "threshold": args.threshold,
+                "grounding_mode": args.grounding_mode,
                 "overall_score": round(overall, 3),
                 "passed": overall >= args.threshold,
                 "results": results,

@@ -1,0 +1,42 @@
+# API unit-price snapshot.
+#
+# Usage (token counts) is measured from the API response; price is configuration.
+# Keeping them apart means a price change can be re-applied to every historical
+# run instead of invalidating it.
+#
+# Rates are intentionally `null` until you fill them in from the official price
+# list — see `source` below. A null rate makes `cost_for()` return
+# `known=False` and a `None` cost. It will NOT be reported as 0.0, because "no
+# price configured" and "this call was free" are different facts.
+#
+# After filling this in, bump `effective_date` and note the change in the commit
+# message: every published cost table cites this date.
+
+effective_date: null
+currency: CNY
+source: https://help.aliyun.com/zh/model-studio/models
+
+models:
+  # Vision analysis (perception stage). Image input is billed separately from
+  # text tokens by the provider — always take the number from the API `usage`
+  # object rather than computing it here.
+  qwen-vl-max:
+    input_per_1k: null
+    output_per_1k: null
+    note: "image tokens billed separately; use the API usage object"
+
+  # Grounding agent (tool-calling stage).
+  qwen-plus:
+    input_per_1k: null
+    output_per_1k: null
+
+  # Embeddings used by the RAG retriever.
+  text-embedding-v2:
+    input_per_1k: null
+    output_per_1k: 0
+
+  # Judge model used by eval/ — its cost belongs to evaluation, not to a
+  # report, and is tracked separately in eval runs.
+  qwen-turbo:
+    input_per_1k: null
+    output_per_1k: null

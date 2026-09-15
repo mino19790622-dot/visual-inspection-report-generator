@@ -13,7 +13,8 @@ class ReportExporter:
         self.out_dir = out_dir
 
     def export(self, image_path: str, det_result: dict, vlm_report: str,
-               standards: list, draw_fn=None, decisions: list = None) -> dict:
+               standards: list, draw_fn=None, decisions: list = None,
+               grounded=None) -> dict:
         """Export a full report. draw_fn(image_path, det_result, out_path) draws bboxes."""
         decisions = decisions or []
         os.makedirs(self.out_dir, exist_ok=True)
@@ -24,7 +25,7 @@ class ReportExporter:
 
         # 1. Markdown report
         md = self._to_markdown(image_path, det_result, vlm_report,
-                               standards, decisions)
+                               standards, decisions, grounded)
         with open(paths["markdown"], "w", encoding="utf-8") as f:
             f.write(md)
 
@@ -49,6 +50,17 @@ class ReportExporter:
                 for s in standards
             ],
         }
+        if grounded is not None:
+            payload["grounded"] = {
+                "mode": grounded.mode,
+                "findings": [f.model_dump() for f in grounded.findings],
+                "unresolved": grounded.unresolved,
+                "tool_calls": grounded.tool_calls,
+                "citation_report": grounded.citation_report,
+                "usage": grounded.usage,
+                "parse_failed": grounded.parse_failed,
+                "failure_reason": grounded.failure_reason,
+            }
         with open(paths["json"], "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
 
@@ -66,7 +78,7 @@ class ReportExporter:
     # ------------------------------------------------------------------ #
     def _to_markdown(self, image_path: str, det_result: dict,
                      vlm_report: str, standards: list,
-                     decisions: list = None) -> str:
+                     decisions: list = None, grounded=None) -> str:
         decisions = decisions or []
         lines = []
         lines.append("# Visual Inspection Report")
@@ -98,8 +110,44 @@ class ReportExporter:
         lines.append(vlm_report)
         lines.append("")
 
+        # Grounded findings — the part that is actually verifiable. A finding
+        # whose citation did not verify is printed with its status rather than
+        # being quietly dropped: an unverified claim must stay visible.
+        lines.append("## 3. Grounded Findings")
+        lines.append("")
+        if grounded is not None and grounded.findings:
+            lines.append("| # | Severity | Finding | Citation | Status |")
+            lines.append("|---|----------|---------|----------|--------|")
+            for i, f in enumerate(grounded.findings, 1):
+                cite = f.citation
+                cite_txt = (f"`{cite.chunk_id}`" if cite else "—")
+                status = f.citation_status or "unverified"
+                lines.append(
+                    f"| {i} | {f.severity} | {f.description} | {cite_txt} "
+                    f"| {status} |")
+            lines.append("")
+            for f in grounded.findings:
+                if f.citation and f.citation.quote:
+                    lines.append(f"> **{f.id}** — “{f.citation.quote}” "
+                                 f"( `{f.citation.chunk_id}` )")
+                    lines.append("")
+        elif grounded is not None and grounded.parse_failed:
+            lines.append("*Grounding stage failed to produce structured "
+                         "findings; see Agent Decisions.*")
+            lines.append("")
+        else:
+            lines.append("*No grounded findings.*")
+            lines.append("")
+
+        if grounded is not None and grounded.unresolved:
+            lines.append("**Observed but not backed by a retrieved clause:**")
+            lines.append("")
+            for u in grounded.unresolved:
+                lines.append(f"- {u}")
+            lines.append("")
+
         # Standards
-        lines.append("## 3. Applicable Standards (RAG)")
+        lines.append("## 4. Applicable Standards (RAG)")
         lines.append("")
         if standards:
             for i, s in enumerate(standards, 1):
@@ -117,7 +165,7 @@ class ReportExporter:
 
         # Agent decisions
         if decisions:
-            lines.append("## 4. Agent Decisions")
+            lines.append("## 5. Agent Decisions")
             lines.append("")
             for d in decisions:
                 lines.append(f"- {d}")

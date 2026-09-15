@@ -80,8 +80,10 @@ def indexed_retriever():
          "road surface inspection grading criteria for pavement rutting "
          "and pothole severity thresholds on motorways"),
     ]
+    # ids follow the production format "<source>::<chunk_index>" — citations
+    # address chunks by this id, so the fixture must not invent a friendlier one
     r.collection.add(
-        ids=[src for src, _ in docs],
+        ids=[f"{src}::0" for src, _ in docs],
         documents=[text for _, text in docs],
         embeddings=_fake_embed([text for _, text in docs]),
         metadatas=[{"source": src, "standard": src, "chunk_index": 0}
@@ -105,8 +107,22 @@ class TestRetrieve:
 
     def test_result_schema(self, indexed_retriever):
         hit = indexed_retriever.retrieve("road surface", k=1)[0]
-        assert set(hit) == {"text", "standard", "source", "distance"}
+        assert set(hit) == {"chunk_id", "text", "standard", "source",
+                            "chunk_index", "distance"}
         assert isinstance(hit["distance"], float)
+
+    def test_chunk_id_is_stable_and_unique(self, indexed_retriever):
+        """Citations point at chunk_id, so it must address one exact clause."""
+        hits = indexed_retriever.retrieve("road surface", k=3)
+        ids = [h["chunk_id"] for h in hits]
+        assert len(ids) == len(set(ids))
+        assert all("::" in i for i in ids)
+
+    def test_chunk_id_round_trips_to_the_source_document(self, indexed_retriever):
+        hit = indexed_retriever.retrieve("road surface", k=1)[0]
+        source, index = hit["chunk_id"].split("::")
+        assert source == hit["source"]
+        assert int(index) == hit["chunk_index"]
 
 
 # ---------------------------- indexing (real Chroma, fake embeddings) ---------------------------- #

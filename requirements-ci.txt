@@ -12,6 +12,9 @@ python-dotenv==1.2.3
 openai==3.3.1
 chromadb==1.5.9
 langgraph==1.2.11
+# v2 additions: structured output schema (grounding) + price snapshot parsing
+pydantic==2.13.4
+PyYAML==6.0.3
 pytest
 pytest-cov
 ruff

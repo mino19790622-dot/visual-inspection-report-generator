@@ -120,10 +120,14 @@ class StandardsRetriever:
 
         retrieved = []
         for i in range(len(results["ids"][0])):
+            # chunk_id is the stable reference a citation must point at. Without
+            # it there is nothing for app.citations to verify against.
             retrieved.append({
+                "chunk_id": results["ids"][0][i],
                 "text": results["documents"][0][i],
                 "standard": results["metadatas"][0][i]["standard"],
                 "source": results["metadatas"][0][i]["source"],
+                "chunk_index": results["metadatas"][0][i]["chunk_index"],
                 "distance": round(results["distances"][0][i], 4),
             })
         return retrieved
