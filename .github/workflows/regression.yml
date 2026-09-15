@@ -1,0 +1,48 @@
+name: regression
+
+# Deterministic, ZERO-API-COST regression gate. Runs on every push (any branch)
+# and on every PR. Covers the grounded-generation invariants that do NOT need
+# an LLM: citation checks, retrieval chunk_id stability, tool registry clamping,
+# redaction, spans, and the full mocked pipeline.
+#
+# The LLM-based golden-set evaluation (needs DASHSCOPE_API_KEY + costs money)
+# lives in eval.yml and is manual (workflow_dispatch) on purpose.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Lint (ruff)
+        run: ruff check app eval tests
+
+      - name: Deterministic regression tests (no LLM, all mocked)
+        # A fake key is supplied only because a few modules read it at import;
+        # no network call is made — the ONNX session, DashScope embeddings and
+        # Qwen calls are all mocked at the module boundary.
+        env:
+          DASHSCOPE_API_KEY: sk-ci-placeholder
+        run: |
+          pytest -q \
+            tests/test_citations.py tests/test_tools.py tests/test_grounding.py \
+            tests/test_log_redaction.py tests/test_spans.py tests/test_rag.py \
+            tests/test_agent.py tests/test_exporter.py tests/test_observability.py \
+            tests/test_detection.py tests/test_vlm.py tests/test_api.py \
+            --cov=app --cov-report=term --cov-fail-under=80

@@ -1,0 +1,78 @@
+name: ablation
+
+# 3-arm tool-calling ablation for the grounding stage (phase C).
+# Manual (workflow_dispatch) on purpose — it calls the VLM + grounding LLM on
+# every golden-set image, so it costs money. Requires DASHSCOPE_API_KEY.
+# See eval/ablation_topk.py for the experiment design (written before running).
+
+on:
+  workflow_dispatch:
+    inputs:
+      arms:
+        description: "Arms to run, space-separated (off fixed agentic)"
+        required: false
+        default: "off fixed agentic"
+      judge:
+        description: "Also LLM-judge the VLM narrative (extra cost)"
+        required: false
+        default: "false"
+
+permissions:
+  id-token: write      # OIDC -> AWS (S3 model download)
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  MODEL_S3_URI: s3://visual-inspection-models-190944420576/yolov8m.onnx
+
+jobs:
+  ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch ONNX model from S3 (gitignored, not in repo)
+        run: aws s3 cp "$MODEL_S3_URI" yolov8m.onnx
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime + eval deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt requests
+
+      - name: Cache RAG index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/chroma
+          key: chroma-ablation-${{ github.run_id }}
+          restore-keys: chroma-ablation-
+
+      - name: Run 3-arm ablation
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+        run: |
+          mkdir -p reports/ablation
+          ARGS="--arms ${{ github.event.inputs.arms }}"
+          if [ "${{ github.event.inputs.judge }}" = "true" ]; then
+            ARGS="$ARGS --judge"
+          fi
+          python -m eval.ablation_topk $ARGS --out reports/ablation/ci-run.json
+
+      - name: Upload ablation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ablation-report
+          path: reports/ablation/ci-run.json

@@ -16,6 +16,7 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 | VLM Analysis | Qwen-VL-Max via Alibaba DashScope | ✅ Complete |
 | RAG Standards Retrieval | DashScope Embeddings + ChromaDB | ✅ Complete |
 | Report Generation | Markdown + JSON export, timestamped | ✅ Complete |
+| Grounded Findings (v2) | tool-calling + citation verification (`app/grounding.py`, `app/citations.py`) | ✅ Complete |
 | Agent Orchestration | LangGraph StateGraph | ✅ Complete |
 | API Layer | FastAPI + uvicorn | ✅ Complete |
 | Deployment | Docker + docker-compose | ✅ Complete |
@@ -28,7 +29,7 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 - **Report Export**: timestamped Markdown + JSON + bbox-annotated image saved to `reports/` on every run
 - **Agent Orchestration (D5)**: LangGraph StateGraph with real decision logic —
   - *Adaptive re-detection*: zero detections → automatically lower confidence threshold and retry once
-  - *Risk-based retrieval depth*: risk level parsed from the VLM's Risk Assessment section (negation-safe) controls how many standards are retrieved (low=3, medium=4, high=5)
+  - *Grounded findings via tool-calling (v2)*: after VLM analysis, a text agent (`app/grounding.py`) calls a `retrieve_standards` tool to pull the clauses it needs and emits structured findings whose `citation` points at chunks it actually retrieved **this request**. Retrieval depth is decided by the model (clamped `k∈[1,5]`, call-budgeted in `app/tools.py`) — not a hard-coded risk table. `mode="off"` reproduces the v1.0 path byte-for-byte and serves as the regression baseline.
   - All decisions logged in state and exported in every report
 - **API Layer (D6)**: FastAPI service — `POST /inspect` (image upload → full JSON report), `GET /standards`, `GET /health`
 
@@ -42,10 +43,10 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 
 ## Testing
 
-58 unit/integration tests (85% coverage), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
+149 unit/integration tests (91% coverage), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
 
 - `test_detection.py` — letterbox preprocessing, bbox decoding roundtrip, confidence filtering, NMS suppression/clipping
-- `test_agent.py` — risk classification (explicit statement vs keyword fallback, negation safety), routing logic, and a **full LangGraph run** verifying adaptive re-detection and risk-based retrieval depth
+- `test_agent.py` — risk classification (explicit statement vs keyword fallback, negation safety), routing logic, and a **full LangGraph run** verifying adaptive re-detection and tool-calling grounded findings (`mode=off` reproduces v1.0)
 - `test_rag.py` — chunking (header split / overlap / fragment filter) and retrieval against a real in-memory ChromaDB with deterministic hash embeddings
 - `test_api.py` — FastAPI `TestClient`: schema contract, 415/500 error paths, mocked agent
 - `test_exporter.py` — Markdown/JSON report content, graceful annotation failure
@@ -75,7 +76,46 @@ python -m eval.run_eval --skip-judge
 python -m eval.run_eval --id bus_street_side
 ```
 
-A separate `eval.yml` workflow lets you run this on demand from the Actions tab (avoids the LLM cost on every push). Baseline run on 10 images: **overall 4.28 / 5.0** (Feb 2026).
+A separate `eval.yml` workflow lets you run this on demand from the Actions tab (avoids the LLM cost on every push). v1.0 baseline (Feb 2026): **overall 4.28 / 5.0**. The v2 numbers are in [Evaluation](#evaluation) below.
+
+## Evaluation
+
+All numbers below come from actual runs of `eval/run_eval.py` / `eval/ablation_topk.py` on the
+10-image golden set (`eval/golden_set/golden_set.json`). **Sample size n = 10** — small; treat the
+numbers as directional, not a production benchmark.
+
+### Golden-set quality (agentic grounding, this branch)
+
+| Metric | Value | Notes |
+|---|---|---|
+| Overall quality score | **4.33 / 5.0** | threshold 3.7; eval run `35008709697` |
+| Attribution pass rate (findings → retrieved chunk) | **100%** | on images that produced findings; 0 unresolved / 0 hallucinated |
+| Mean retrieval calls | **2.1 / image** | 21 calls across 10 images; `k` chosen by the model, clamped to 1–5 |
+| Structured-parse failures | **0 / 10** | `submit_findings` validated by pydantic — empirical proof the tool-calling loop runs end-to-end |
+
+> **Judge threshold is provisional.** The 3.7 gate is a starting value, not a calibrated
+> threshold. Judge credibility (incl. self-enhancement bias, since judge + measured model are both
+> Qwen-family) is verified in phase B. Do not read "passed 3.7" as "validated for production."
+
+### Tool-calling ablation (agentic vs fixed vs off) — _pending this PR_
+
+A 3-arm ablation (`eval/ablation_topk.py`) compares model-decided retrieval (**agentic**) against a
+fixed top-k injected up front (**fixed**) and the v1.0 narrative path (**off**). Per-arm attribution
+pass rate, retrieval-call count and `k` distribution will be filled here after the run. **If agentic
+looks better only because it issued more retrieval calls, that is reported as "spent more", not
+"strategy better."** If it is worse, that is reported too.
+
+## Cost & Latency
+
+Token usage is measured from the API response and recorded per stage in `logs/inspect_spans.jsonl`.
+Money is **derived** from `config/pricing.yaml` (a versioned price snapshot), never estimated in code.
+
+| Metric | Value | Notes |
+|---|---|---|
+| VLM tokens / request | measured | prompt + completion, recorded in the `vlm_call` span |
+| Grounding tokens / request (agentic, fixed) | measured | cheap text model, not VLM-priced |
+| Cost in CNY | **TBD** | `config/pricing.yaml` rates are `null` → `known=False`; filled in phase A. Never rendered as 0.0 |
+| Latency / stage | measured | detect / VLM / ground / export in the trace JSONL |
 
 ## Observability
 
@@ -90,7 +130,7 @@ Every `/inspect` call appends one JSON line to `logs/inspect.jsonl` (path overri
  "total_latency_ms":2400,"saved":["report","annotated"]}
 ```
 
-Cost is estimated at ¥0.02 / 1K tokens (qwen-vl-max public price); update `_RMB_PER_1K_TOKENS` in `app/vlm/client.py` if pricing changes.
+Cost is **derived** from `config/pricing.yaml` (a versioned price snapshot), not hard-coded in code. Until rates are filled, cost reports `known=False` and is **never rendered as 0.0** — see `app/observability/pricing.py`.
 
 ## Quick Start
 ```bash
@@ -181,7 +221,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
 - **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
 - **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose; deployed live on AWS ECS Fargate + ECR (CI/CD via GitHub Actions OIDC)
-- **Quality**: pytest 58 tests (85% coverage, CI-gated) + LLM-as-judge golden-set eval (10 images, threshold-gated, manually triggered) + JSONL cost/latency observability on every `/inspect`
+- **Quality**: pytest 149 tests (91% coverage, CI-gated) + LLM-as-judge golden-set eval (10 images, threshold-gated, manually triggered) + JSONL cost/latency observability on every `/inspect`
 
 ## Project Structure
 
@@ -199,7 +239,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │       └── graph.py         # LangGraph StateGraph (adaptive retry + risk routing)
 │   └── api/
 │       └── server.py        # FastAPI: POST /inspect, GET /standards, GET /health
-│   └── observability.py     # Structured JSONL logging (latency / tokens / cost)
+│   └── observability/       # Structured JSONL logging (latency / tokens / cost) + spans + allow-list redaction + price-snapshot costing
 ├── eval/                    # Golden-set + LLM-as-judge evaluation
 │   ├── golden_set/golden_set.json
 │   ├── judge.py             # qwen-turbo judge scoring 4 dimensions

@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       threshold:
-        description: "Overall score threshold (0-5 scale, default 3.7)"
+        description: "Overall score threshold (0-5 scale, default 3.7). PROVISIONAL — a starting gate, not a calibrated threshold; judge credibility (incl. self-enhancement bias, judge + model both Qwen-family) is validated in phase B."
         required: false
         default: "3.7"
       only:
