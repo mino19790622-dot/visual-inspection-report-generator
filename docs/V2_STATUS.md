@@ -77,12 +77,15 @@ tool_calls = getattr(msg, "tool_calls", None)   # 服务端返回的结构化调
 ## Q3 · 现在 README 里有几个可展示的数字？
 
 - **当前（C 开始前）：0 个真实测量数字。** 此前投入全在搭机器（Phase 0），无产出数字。
-- **C 阶段结束时目标：≥3 个真实数字**（来自 agentic eval 实测 + ablation）：
+- **C 阶段结束时：≥3 个真实数字**（全部来自实际运行，可复现）：
 
   1. golden-set 总体质量分 **4.33 / 5.0**（n=10，阈值 3.7，实测 run 35008709697）
-  2. agentic 臂 **attribution pass rate = 100%**（有 finding 的图全部 ok，0 unresolved / 0 hallucinated）
-  3. agentic 臂 **平均检索调用 2.1 次/图**（10 图共 21 次，k 由模型自决）
-  4. （ablation 跑完补）fixed / off 两臂的同口径数字，用于对照
+  2. 三臂 ablation（run 35018667423，n=10，commit `6b82f8a`）：
+     - `off`（v1.0 叙述）0 findings，**确定性检查 10/10** → 回归基线成立，Phase 0 未破坏旧路径
+     - `fixed`（k=5 注入）5 findings，attribution **100%**，1.0 calls/img，21.3k grounding tokens，1/10 parse fail
+     - `agentic`（模型自定 k，众数 2）6 findings，attribution **100%**，1.8 calls/img，53.4k grounding tokens，0/10 parse fail
+  3. 诚实读法：agentic 与 fixed **同为 100% attribution**，agentic 多 1 条 finding，但调用 1.8×、grounding tokens 2.5×
+     → 在 n=10 内读作 **"花得更多"，不声称"策略更优"**；ablation 脚本已自动产出该 honesty_note。
 
-> 注：以上 1–3 已是真实运行值（eval artifact `ci-run.json`），C 阶段会在 README `## Evaluation`
-> 节正式引用，并**标注样本量 n=10**，不夸大分量。
+> 已在 README `## Evaluation` 节正式引用以上数字，**标注样本量 n=10**，并写明单次 pass 的方差
+> （另一次 agentic pass 的 per-image findings 不同；fixed 有 1/10 parse fail 而 agentic 0/10）。

@@ -84,26 +84,41 @@ All numbers below come from actual runs of `eval/run_eval.py` / `eval/ablation_t
 10-image golden set (`eval/golden_set/golden_set.json`). **Sample size n = 10** — small; treat the
 numbers as directional, not a production benchmark.
 
-### Golden-set quality (agentic grounding, this branch)
+### Tool-calling ablation — agentic vs fixed vs off
+
+Run `35018667423` (`eval/ablation_topk.py --arms off fixed agentic`), commit `6b82f8a`, **n = 10**,
+grounding temperature 0, one pass per image.
+
+| Arm | Findings | Citations ok/unresolved/hallucinated | Attribution pass rate | Retrieval calls (mean) | k chosen | Grounding tokens | Parse failures | Deterministic checks |
+|---|---|---|---|---|---|---|---|---|
+| `off` (v1.0 narrative) | 0 | – | – | 0.0 | – | 0 | 0/10 | **10/10** |
+| `fixed` (k=5 injected) | 5 | 5 / 0 / 0 | **100%** | 1.0 | 5 (fixed) | 21,305 | 1/10 | 10/10 |
+| `agentic` (model decides k) | 6 | 6 / 0 / 0 | **100%** | 1.8 | 2 (modal) | 53,352 | 0/10 | 10/10 |
+
+**What this actually says (no spin):**
+- The `off` arm is the regression baseline: the v1.0 narrative path still passes **all 10**
+  deterministic checks, so Phase 0 did not break the old pipeline.
+- Both `fixed` and `agentic` reached **100% attribution** — no hallucinated citations in this sample.
+- `agentic` produced one more finding and used a *smaller* `k` (2 vs 5), **but** it spent ~1.8× the
+  retrieval calls and ~2.5× the grounding tokens (53.4k vs 21.3k). Within n=10 this reads as
+  **"spent more", not "strategy better"** — the extra cost is the multi-round tool loop. We do **not**
+  claim agentic is superior.
+
+### Golden-set quality gate
 
 | Metric | Value | Notes |
 |---|---|---|
-| Overall quality score | **4.33 / 5.0** | threshold 3.7; eval run `35008709697` |
-| Attribution pass rate (findings → retrieved chunk) | **100%** | on images that produced findings; 0 unresolved / 0 hallucinated |
-| Mean retrieval calls | **2.1 / image** | 21 calls across 10 images; `k` chosen by the model, clamped to 1–5 |
-| Structured-parse failures | **0 / 10** | `submit_findings` validated by pydantic — empirical proof the tool-calling loop runs end-to-end |
+| Overall quality score | **4.33 / 5.0** | threshold 3.7; eval run `35008709697` (agentic) |
+| VLM tokens / 10 images | ~18.1k | consistent across arms (18.1–18.3k) |
 
-> **Judge threshold is provisional.** The 3.7 gate is a starting value, not a calibrated
-> threshold. Judge credibility (incl. self-enhancement bias, since judge + measured model are both
-> Qwen-family) is verified in phase B. Do not read "passed 3.7" as "validated for production."
+> **Variance caveat.** These are single-pass runs. A second agentic pass produced different per-image
+> findings (e.g. `large_building_aerial`: 3 findings in the gate run vs 1 in the ablation), and the
+> `fixed` arm hit 1/10 parse failures while `agentic` hit 0/10. Treat per-image counts as noisy; the
+> aggregate claims above are the ones we stand behind.
 
-### Tool-calling ablation (agentic vs fixed vs off) — _pending this PR_
-
-A 3-arm ablation (`eval/ablation_topk.py`) compares model-decided retrieval (**agentic**) against a
-fixed top-k injected up front (**fixed**) and the v1.0 narrative path (**off**). Per-arm attribution
-pass rate, retrieval-call count and `k` distribution will be filled here after the run. **If agentic
-looks better only because it issued more retrieval calls, that is reported as "spent more", not
-"strategy better."** If it is worse, that is reported too.
+> **Judge threshold is provisional.** 3.7 is a starting gate, not a calibrated threshold. Judge
+> credibility (incl. self-enhancement bias, judge + measured model both Qwen-family) is verified in
+> phase B. Do not read "passed 3.7" as "validated for production."
 
 ## Cost & Latency
 
@@ -112,10 +127,10 @@ Money is **derived** from `config/pricing.yaml` (a versioned price snapshot), ne
 
 | Metric | Value | Notes |
 |---|---|---|
-| VLM tokens / request | measured | prompt + completion, recorded in the `vlm_call` span |
-| Grounding tokens / request (agentic, fixed) | measured | cheap text model, not VLM-priced |
+| VLM tokens / 10 images | ~18.1k | nearly identical across arms (18.1–18.3k) — grounding does not change the VLM call |
+| Grounding tokens / 10 images | `off` 0 · `fixed` 21.3k · `agentic` 53.4k | agentic's multi-round tool loop is ~2.5× `fixed` |
 | Cost in CNY | **TBD** | `config/pricing.yaml` rates are `null` → `known=False`; filled in phase A. Never rendered as 0.0 |
-| Latency / stage | measured | detect / VLM / ground / export in the trace JSONL |
+| Latency / stage | measured | detect / VLM / ground / export per request in the trace JSONL |
 
 ## Observability
 
@@ -287,3 +302,6 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - [docs/USER_GUIDE_zh.md](docs/USER_GUIDE_zh.md) — 中文操作手册（安装 / 三种运行方式 / Docker / 常见问题排查）
 - [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) — AWS deployment runbook (ECR + App Runner + GitHub OIDC)
 - [docs/AWS_DEPLOYMENT_zh.md](docs/AWS_DEPLOYMENT_zh.md) — AWS 部署操作手册（中文，上云全流程）
+- [docs/V2_STATUS.md](docs/V2_STATUS.md) — v2 upgrade status (pre-flight Q1–Q3 + phase-C measured numbers)
+- [docs/INTERVIEW_NOTES.md](docs/INTERVIEW_NOTES.md) — interview talking points + explicit boundaries
+- [docs/V2_GAP_ANALYSIS.md](docs/V2_GAP_ANALYSIS.md) — v1.0 vs upgrade-plan gap analysis (why phase 0 came first)
