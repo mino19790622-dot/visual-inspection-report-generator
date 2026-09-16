@@ -1,5 +1,11 @@
 # Judge credibility cross-check
 
+> **Read this section backwards.** §1–§5 below are the **pre-registration**: they describe the state
+> of the world *before* the check ran, which is why they still call 3.7 "the gate" and say its
+> credibility "is verified in phase B". Rewriting them after the fact would destroy the point of
+> pre-registering. **§6 holds the result and the verdict:** the gate was downgraded to a reference
+> value. If you are reading this to find out what 3.7 currently means, go to §6.
+
 The quality gate in `eval/run_eval.py` (`DEFAULT_THRESHOLD = 3.7`) is decided partly by an LLM judge
 (`qwen-turbo`) scoring reports written by `qwen-plus` / `qwen-vl-max`. Judge and measured models are
 the **same model family**. If the judge is lenient toward its own family, the gate passes reports a
@@ -175,7 +181,9 @@ applies, and it is applied as written:
 - **`judge_avg` is reported as a reference value**, with the measured disagreement published
   alongside it (this section).
 - **The README's "passed 3.7" language is rewritten as a non-claim** — see the *Golden-set quality
-  gate* section.
+  evaluation* section. The same wording is now carried by `eval/run_eval.py`'s
+  `DEFAULT_THRESHOLD` comment and docstring, and by `.github/workflows/eval.yml`'s header and
+  `threshold` input description.
 
 Two honest qualifications, offered as observations rather than as a softening of the rule:
 

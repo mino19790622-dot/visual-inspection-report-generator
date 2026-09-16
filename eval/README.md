@@ -4,10 +4,14 @@ Golden-set evaluation and LLM-as-judge for the visual-inspection agent.
 
 ## What it is
 
-A second quality gate, on top of unit tests:
+A second layer of evaluation, on top of unit tests — manual, and **not a gate**:
 
 - **Unit tests** (`tests/`) verify *code logic* (mocked LLM/CV calls).
-- **Golden-set eval** (`eval/`) verifies *AI output quality* (real VLM + real judge).
+- **Golden-set eval** (`eval/`) verifies *AI output quality* (real VLM + real judge), and reports a
+  score against a **reference** value. The judge cross-check (`golden_set/JUDGE_CROSSCHECK.md`)
+  pre-registered that a verdict flip between the judge and an independent rater would downgrade that
+  value from a gate to a reference, and one image did flip — so the score is evidence, not an
+  acceptance bar. The only per-push gate in this repo is the deterministic regression suite.
 
 Without this, a refactor that breaks the VLM prompt would still pass CI because
 the LLM call is mocked out. The eval catches prompt/pipeline regressions by
@@ -165,9 +169,11 @@ Compares the judge against an independent rater. Primary metrics are agreement
 rates and the **signed** mean difference (judge − rater) — agreement measures
 noise, the sign measures bias, and bias is the question. Spearman ρ is secondary
 on purpose: the scale is 1–5 ordinal, ties dominate, and a coefficient at this n
-is easy to over-read. `gate_impact` converts the threshold into the `judge_avg`
-the gate actually demands (`(T − 2.0) / 0.6`) and lists images where the two
-raters disagree on pass/fail. Result and the pre-registered decision rule:
+is easy to over-read. `gate_impact` answers the counterfactual the pre-registered
+rule needed — "would this threshold work as a gate?" — by converting it into the
+`judge_avg` it demands (`(T − 2.0) / 0.6`) and listing images where the two
+raters disagree on pass/fail. The threshold is currently a reference value, not
+a gate. Result and the pre-registered decision rule:
 `golden_set/JUDGE_CROSSCHECK.md`.
 
 ## Run on GitHub Actions
@@ -179,7 +185,7 @@ Trigger from the Actions tab → "eval" → "Run workflow". Three modes:
 
 | mode | runs | cost |
 |---|---|---|
-| `eval` | golden-set quality gate (VLM + LLM judge) | VLM + judge calls |
+| `eval` | golden-set LLM evaluation (VLM + LLM judge); score vs a reference value | VLM + judge calls |
 | `ablation` | 3-arm tool-calling comparison, then the cost table | VLM + grounding LLM |
 | `retrieval` | recall@k / MRR vs annotated truth | embeddings only (`grounding=none`); set `grounding` to `fixed`/`agentic` to add the LLM layer (extra cost, and confounded — see below) |
 

@@ -1,9 +1,16 @@
 """Cross-check the qwen judge against an independent rater.
 
 The judge (qwen-turbo) scores reports produced by qwen-plus / qwen-vl-max. Same
-model family. If the judge is lenient toward its own family, the 3.7 gate in
-``eval/run_eval.py`` passes reports a neutral reader would fail, and every
-"overall >= 3.7" claim in the README inherits that error.
+model family. If the judge is lenient toward its own family, a threshold in
+``eval/run_eval.py`` would pass reports a neutral reader would fail, and every
+"overall >= 3.7" claim in the README would inherit that error.
+
+That threshold is **no longer a gate**: this check's pre-registered rule
+downgraded it to a reference value, because one image flipped pass/fail between
+the two raters. See ``eval/golden_set/JUDGE_CROSSCHECK.md`` §6 for the result and
+``gate_impact`` below for the counterfactual question the rule needed answered
+("would this threshold be a sound gate?") — which is why that helper keeps the
+word *gate* in its name.
 
 Why an agreement rate and not a correlation coefficient
 -------------------------------------------------------
@@ -160,13 +167,18 @@ def agreement(judge: dict[str, dict[str, int]],
 def gate_impact(judge: dict[str, dict[str, int]],
                 hand: dict[str, dict[str, int]],
                 threshold: float) -> dict[str, Any]:
-    """Would the two raters pass/fail the same images at the gate?
+    """Would the two raters pass/fail the same images at this threshold?
+
+    This is the counterfactual the pre-registered rule asked for, not a
+    statement that the threshold *is* a gate — it is currently a reference
+    value. The helper keeps its name because the question is genuinely
+    "would this value work as one?".
 
     run_eval scores an image as ``5*0.4*det + 0.6*judge_avg``. The deterministic
     part is identical for both raters, so only the judge term moves. With
     det_score == 1.0 (which the ablation shows for every image) the judge term
-    must reach ``(threshold - 2.0) / 0.6`` for the image to pass; that is the
-    judge average the gate actually demands.
+    must reach ``(threshold - 2.0) / 0.6`` for the image to clear the
+    threshold; that is the judge average the threshold actually demands.
     """
     needed = round((threshold - 2.0) / 0.6, 3)
     flips = []

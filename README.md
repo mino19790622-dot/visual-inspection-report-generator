@@ -45,7 +45,7 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 
 ## Testing
 
-153 unit/integration tests (coverage measured at 91%; the CI gate is set to 80%), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
+217 unit/integration tests (coverage measured at 91%; the CI gate is set to 80%), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
 
 - `test_detection.py` — letterbox preprocessing, bbox decoding roundtrip, confidence filtering, NMS suppression/clipping
 - `test_agent.py` — risk classification (explicit statement vs keyword fallback, negation safety), routing logic, and a **full LangGraph run** verifying adaptive re-detection and tool-calling grounded findings (`mode=off` reproduces v1.0)
@@ -60,12 +60,14 @@ ruff check app eval tests
 pytest --cov=app --cov-fail-under=80
 ```
 
-The quality gate is split by cost: **every push runs the deterministic regression suite**
+The CI cost split: **every push runs the deterministic regression suite**
 (`.github/workflows/regression.yml` — all mocked, zero API cost, and the only per-push gate),
 while the **LLM golden-set evaluation is manual** (`.github/workflows/eval.yml` — needs a real
-key and spends money).
+key and spends money). The LLM evaluation produces a score and a reference comparison; it is not
+gated, and since the judge cross-check its 3.7 value is explicitly a reference, not an acceptance
+bar (see *Golden-set evaluation* below).
 
-## Golden-Set Evaluation (MLOps quality gate)
+## Golden-set Evaluation (manual, judge-scored)
 
 Beyond unit tests, the VLM's *output quality* is regression-tested against a hand-curated golden set:
 
@@ -191,14 +193,14 @@ actually exercised:
 > recommendation and §7 for why a three-way calibration/tuning/test split is infeasible at this size
 > (the whole set is the test set, and tuning retriever parameters against it is prohibited).
 
-### Golden-set quality gate
+### Golden-set quality evaluation
 
 | Metric | Value | Notes |
 |---|---|---|
 | Overall quality score | **4.445 / 5.0** | eval run `35078726570` (agentic), judge-scored |
 | Overall, independent rater | **4.550 / 5.0** | same run, non-Qwen rater, report-only — see below |
 | VLM tokens / 10 images | ~18.1k | consistent across arms (18.1–18.3k) |
-| 3.7 threshold | **reference value, not a gate** | see *Judge credibility* below |
+| 3.7 comparison value | **reference value, not a gate** | see *Judge credibility* below |
 
 > **Judge credibility is now measured, and 3.7 is downgraded to a reference.** A pre-registered
 > cross-check against an independent non-Qwen rater (`eval/golden_set/JUDGE_CROSSCHECK.md`, n = 10
@@ -220,7 +222,7 @@ actually exercised:
 > disagreement above published beside it.
 
 > **Variance caveat.** These are single-pass runs. A second agentic pass produced different per-image
-> findings (e.g. `large_building_aerial`: 3 findings in the gate run vs 1 in the ablation), and the
+> findings (e.g. `large_building_aerial`: 3 findings in the eval run vs 1 in the ablation), and the
 > `fixed` arm hit 1/10 parse failures while `agentic` hit 0/10. Treat per-image counts as noisy; the
 > aggregate claims above are the ones we stand behind.
 
@@ -443,7 +445,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
 - **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
 - **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose; deployed live on AWS ECS Fargate + ECR (CI/CD via GitHub Actions OIDC)
-- **Quality**: pytest 153 tests (91% measured coverage; CI gate at 80%) + LLM-as-judge golden-set eval (10 images, threshold-gated, manually triggered) + JSONL cost/latency observability on every `/inspect`
+- **Quality**: pytest 217 tests (91% measured coverage; CI gate at 80%) + LLM-as-judge golden-set eval (10 images, manually triggered; its score is compared against a **reference** value, not an acceptance gate) + JSONL cost/latency observability on every `/inspect`
 
 ## Project Structure
 
@@ -470,7 +472,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │   ├── run_eval.py                # eval runner (deterministic + judge, --grounding-mode)
 │   ├── ablation_topk.py           # v2: 3-arm ablation (off / fixed / agentic)
 │   └── README.md
-├── tests/                         # pytest suite (153 tests, ~91% coverage, no network)
+├── tests/                         # pytest suite (217 tests, 91% coverage, no network)
 │   ├── fakes.py                   # v2: ScriptedClient — fake LLM for grounding tests
 │   ├── test_citations.py          # v2
 │   ├── test_tools.py              # v2

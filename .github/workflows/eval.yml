@@ -2,7 +2,9 @@ name: eval
 
 # Costing evaluation workflows, triggered manually (workflow_dispatch) so we
 # control cost. Three modes:
-#   eval      — golden-set quality gate (VLM narrative + LLM judge, threshold-gated)
+#   eval      — golden-set LLM evaluation (VLM narrative + LLM judge). Its score
+#               is compared against a REFERENCE value (default 3.7), not an
+#               acceptance gate — see the `threshold` input below.
 #   ablation  — 3-arm tool-calling ablation (off / fixed / agentic), eval/ablation_topk.py
 #   retrieval — recall@k / MRR against the annotated retrieval truth, plus an
 #               optional grounding pass that localises each miss
@@ -20,17 +22,17 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "eval = golden-set quality gate; ablation = 3-arm tool-calling comparison; retrieval = recall@k/MRR vs annotated truth"
+        description: "eval = golden-set LLM evaluation; ablation = 3-arm tool-calling comparison; retrieval = recall@k/MRR vs annotated truth"
         type: choice
         options: ["eval", "ablation", "retrieval"]
         default: "eval"
         required: true
       threshold:
-        description: "Overall score threshold (0-5 scale, default 3.7). PROVISIONAL — a starting gate, not a calibrated threshold; judge credibility (incl. self-enhancement bias, judge + model both Qwen-family) is validated in phase B."
+        description: "Reference value the overall score (0-5 scale) is compared against; default 3.7. NOT an acceptance gate: the judge credibility cross-check (eval/golden_set/JUDGE_CROSSCHECK.md) pre-registered that one image flipping pass/fail between the judge and an independent rater would downgrade this from a gate to a reference, and one image did flip (exact agreement 0.55). Treat a single image at this value as an observation, not a decision."
         required: false
         default: "3.7"
       only:
-        description: "Optional: only run this golden-set id (e.g. bus_street_side)"
+        description: "Optional: run only these golden-set ids, comma-separated (e.g. bus_street_side,marina_aerial). A subset is the cheap way to hand-audit the judge."
         required: false
         default: ""
       arms:

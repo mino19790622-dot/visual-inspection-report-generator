@@ -6,12 +6,21 @@ For each image in the golden set:
   3. LLM-as-judge scoring of the VLM report against the rubric.
   4. Per-image score on 0-5 scale: 5*0.4*det + 0.6*judge_avg.
   5. Overall score = mean of per-image scores.
-  6. Exit 0 if overall >= threshold (default 3.8), else 1.
+  6. Exit 0 if overall >= threshold (default 3.7), else 1.
+
+The exit code is a **screening signal for a manual run, not an acceptance
+gate**. The judge credibility cross-check
+(eval/golden_set/JUDGE_CROSSCHECK.md) pre-registered that a single image
+flipping pass/fail between the judge and an independent rater would downgrade
+the threshold from a gate to a reference value; one image did flip, so 3.7 is
+now a reference. Do not wire this exit code into a required check, and do not
+cite a single image's pass/fail at it as a decision.
 
 Usage:
     python -m eval.run_eval                   # run full golden set
     python -m eval.run_eval --id bus_street_side  # one image
-    python -m eval.run_eval --threshold 3.8   # custom threshold
+    python -m eval.run_eval --id a,b,c        # a comma-separated subset
+    python -m eval.run_eval --threshold 3.8   # custom screening value
     python -m eval.run_eval --out eval/runs/run.json
 """
 from __future__ import annotations
@@ -33,11 +42,17 @@ from app.agent.graph import InspectionAgent  # noqa: E402
 from eval.judge import judge  # noqa: E402
 
 GOLDEN_SET = Path(__file__).parent / "golden_set" / "golden_set.json"
-DEFAULT_THRESHOLD = 3.7  # on 0-5 scale; tolerates LLM-judge variance
+# A REFERENCE VALUE, not an acceptance gate. The judge credibility cross-check
+# (eval/golden_set/JUDGE_CROSSCHECK.md) pre-registered that any image flipping
+# pass/fail between the judge and an independent rater would downgrade this from
+# a gate to a reference; one image did flip (exact agreement 0.55), so that is
+# what it is. Do not cite a single image's pass/fail at this value as a decision.
+DEFAULT_THRESHOLD = 3.7
 JUDGE_WEIGHT = 0.6
 DET_WEIGHT = 0.4
 # Score is on a 0-5 scale: 0.4 * 5 = 2.0 from deterministic, 0.6 * 5 = 3.0 from judge.
-# Default threshold 3.8 means: must pass all deterministic checks AND avg judge >= 3/5.
+# At the 3.7 reference value an image needs all deterministic checks AND a judge
+# average of (3.7 - 2.0) / 0.6 = 2.833.
 
 
 def _load_golden_set() -> list[dict]:
@@ -149,7 +164,10 @@ def main() -> int:
                                  "(comma-separated). A subset is enough to "
                                  "hand-audit the judge on a few images.")
     ap.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD,
-                    help=f"overall score threshold (default {DEFAULT_THRESHOLD})")
+                    help=f"score below which a run is flagged (default "
+                         f"{DEFAULT_THRESHOLD}). This is a screening/reference "
+                         f"value, NOT an acceptance gate: see "
+                         f"eval/golden_set/JUDGE_CROSSCHECK.md.")
     ap.add_argument("--skip-judge", action="store_true",
                     help="only run deterministic checks (no LLM cost)")
     ap.add_argument("--grounding-mode", default="agentic",
@@ -170,7 +188,7 @@ def main() -> int:
             print(f"ERROR: id(s) not in golden set: {missing}", file=sys.stderr)
             return 2
 
-    print(f"Running evaluation on {len(items)} image(s); threshold={args.threshold}; "
+    print(f"Running evaluation on {len(items)} image(s); reference={args.threshold}; "
           f"judge={'on' if not args.skip_judge else 'OFF (deterministic only)'}; "
           f"grounding={args.grounding_mode}\n")
 
@@ -194,9 +212,9 @@ def main() -> int:
         if "error" in r:
             print(f"  ERROR: {r['error']}\n")
         else:
-            mark = "PASS" if r["score"] >= args.threshold else "FAIL"
+            mark = "above" if r["score"] >= args.threshold else "below"
             print(f"  risk={r['risk_level']:6s} det={r['detection_count']:2d}  "
-                  f"score={r['score']:.3f}  [{mark}]")
+                  f"score={r['score']:.3f}  [{mark} reference]")
             if r["det_failures"]:
                 for f in r["det_failures"]:
                     print(f"    - {f}")
@@ -214,8 +232,8 @@ def main() -> int:
     overall = sum(r.get("score", 0) for r in results) / max(len(results), 1)
     total_elapsed = time.time() - t_start
     print("=" * 64)
-    print(f"OVERALL SCORE: {overall:.3f}  (threshold {args.threshold})  "
-          f"[{'PASS' if overall >= args.threshold else 'FAIL'}]")
+    print(f"OVERALL SCORE: {overall:.3f}  (reference {args.threshold})  "
+          f"[{'above' if overall >= args.threshold else 'below'} reference]")
     print(f"Total time: {total_elapsed:.1f}s  "
           f"({len(results)} images, judge={'on' if not args.skip_judge else 'off'})")
     print("=" * 64)
@@ -243,10 +261,12 @@ def main() -> int:
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump({
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "threshold": args.threshold,
+                # Named to match what this is: a comparison against a reference
+                # value, not a pass/fail gate. See JUDGE_CROSSCHECK.md.
+                "reference_threshold": args.threshold,
                 "grounding_mode": args.grounding_mode,
                 "overall_score": round(overall, 3),
-                "passed": overall >= args.threshold,
+                "above_reference": overall >= args.threshold,
                 "results": results,
             }, f, indent=2, ensure_ascii=False)
         print(f"\nWrote {args.out}")
