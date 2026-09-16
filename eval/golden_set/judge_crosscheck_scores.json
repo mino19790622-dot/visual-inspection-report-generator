@@ -1,0 +1,84 @@
+{
+  "rater": "independent rater (non-Qwen), report text only, blinded to item labels",
+  "blind": true,
+  "scored_at": "2026-09-16",
+  "eval_run": "35078726570",
+  "eval_artifact_result_id_order": "image ids, as stored in the run_eval artifact",
+  "procedure": "JUDGE_CROSSCHECK.md (pre-registered). Reports were extracted from the run artifact, re-keyed to opaque labels item_01..item_10 by a seeded shuffle, and scored by the rater without the image id visible. Labels were unblinded only after all 10 were scored.",
+  "blindness_limits": "the rater had seen the judge's per-image scores for this run before scoring; item labels were hidden, but the image can sometimes be inferred from report content",
+  "subset_note": "all 10 scored; JUDGE_CROSSCHECK.md pre-registered 4. Scoring all 10 strictly increases power and the decision rule was not changed, so this is a disclosed deviation, not a post-hoc selection.",
+  "label_mapping": {
+    "item_01": "construction_foundation_aerial",
+    "item_02": "industrial_red_soil",
+    "item_03": "marina_aerial",
+    "item_04": "port_construction",
+    "item_05": "beach_walkers",
+    "item_06": "children_group",
+    "item_07": "industrial_lot_aerial",
+    "item_08": "large_building_aerial",
+    "item_09": "parking_lot_aerial",
+    "item_10": "bus_street_side"
+  },
+  "scores": {
+    "construction_foundation_aerial": {
+      "scene_id": 5,
+      "safety": 5,
+      "domain_awareness": 5,
+      "structure": 5
+    },
+    "industrial_red_soil": {
+      "scene_id": 5,
+      "safety": 1,
+      "domain_awareness": 5,
+      "structure": 5
+    },
+    "marina_aerial": {
+      "scene_id": 5,
+      "safety": 5,
+      "domain_awareness": 5,
+      "structure": 5
+    },
+    "port_construction": {
+      "scene_id": 2,
+      "safety": 1,
+      "domain_awareness": 5,
+      "structure": 5
+    },
+    "beach_walkers": {
+      "scene_id": 3,
+      "safety": 4,
+      "domain_awareness": 3,
+      "structure": 5
+    },
+    "children_group": {
+      "scene_id": 3,
+      "safety": 1,
+      "domain_awareness": 4,
+      "structure": 5
+    },
+    "industrial_lot_aerial": {
+      "scene_id": 5,
+      "safety": 5,
+      "domain_awareness": 5,
+      "structure": 5
+    },
+    "large_building_aerial": {
+      "scene_id": 5,
+      "safety": 5,
+      "domain_awareness": 5,
+      "structure": 5
+    },
+    "parking_lot_aerial": {
+      "scene_id": 5,
+      "safety": 5,
+      "domain_awareness": 4,
+      "structure": 5
+    },
+    "bus_street_side": {
+      "scene_id": 4,
+      "safety": 2,
+      "domain_awareness": 3,
+      "structure": 5
+    }
+  }
+}

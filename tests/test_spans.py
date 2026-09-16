@@ -2,7 +2,7 @@
 import time
 
 from app.observability import cost_breakdown
-from app.observability.pricing import cost_for, price_for
+from app.observability.pricing import cost_for, load_pricing, price_for
 from app.observability.spans import RequestTrace
 
 
@@ -76,11 +76,45 @@ class TestSpans:
 
 
 class TestPricing:
-    def test_unconfigured_rate_is_reported_unknown_not_zero(self):
-        """config/pricing.yaml ships with null rates on purpose."""
-        result = cost_for("qwen-vl-max", 1000, 1000)
+    @staticmethod
+    def _null_rated(tmp_path, monkeypatch, model: str = "some-model"):
+        """Point PRICING_PATH at a file where `model` is listed but unpriced."""
+        pricing = tmp_path / "p.yaml"
+        pricing.write_text(
+            "effective_date: '2026-09-15'\ncurrency: CNY\n"
+            f"models:\n  {model}:\n    input_per_1k: null\n"
+            "    output_per_1k: null\n", encoding="utf-8")
+        monkeypatch.setenv("PRICING_PATH", str(pricing))
+
+    def test_null_rate_is_reported_unknown_not_zero(self, tmp_path, monkeypatch):
+        """A listed-but-unpriced model must be unknown, not free.
+
+        0.0 would read as a measurement; None is the honest "not reported".
+        This deliberately uses a fixture rather than a shipped model: it used
+        to key off qwen-vl-max having null rates, which stopped being true once
+        the real DashScope rates were filled in, and a test whose subject is
+        "which real models are priced" cannot guard the mechanism.
+        """
+        self._null_rated(tmp_path, monkeypatch, model="some-model")
+        result = cost_for("some-model", 1000, 1000)
         assert result["known"] is False
         assert result["cost"] is None
+
+    def test_shipped_pricing_file_carries_provenance(self):
+        """The rates that ship must say when and in what currency they apply.
+
+        An unpinned rate is worse than a missing one: it looks authoritative
+        while silently drifting out of date.
+        """
+        pricing = load_pricing()
+        assert pricing.get("effective_date"), "effective_date is required"
+        assert pricing.get("currency") == "CNY"
+        models = pricing.get("models") or {}
+        for m in ("qwen-vl-max", "qwen-plus", "text-embedding-v2",
+                  "qwen-turbo"):
+            assert m in models, f"{m} missing from the shipped rate snapshot"
+            assert "input_per_1k" in models[m]
+            assert "output_per_1k" in models[m]
 
     def test_unknown_model_is_unknown(self):
         assert cost_for("not-a-model", 1, 1)["known"] is False
@@ -103,9 +137,10 @@ class TestPricing:
     def test_price_for_returns_none_when_absent(self):
         assert price_for(None) is None
 
-    def test_cost_breakdown_marks_unknown(self):
+    def test_cost_breakdown_marks_unknown(self, tmp_path, monkeypatch):
+        self._null_rated(tmp_path, monkeypatch, model="some-model")
         trace = RequestTrace()
-        with trace.span("vlm_call", model="qwen-vl-max") as s:
+        with trace.span("vlm_call", model="some-model") as s:
             trace.set_usage(s, {"prompt_tokens": 10, "completion_tokens": 5})
         out = cost_breakdown(trace)
         assert out["all_known"] is False

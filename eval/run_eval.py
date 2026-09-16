@@ -106,6 +106,11 @@ def evaluate_one(agent: InspectionAgent, item: dict,
         "judge_raw": judge_result,
         "judge_avg": round(judge_avg, 2),
         "score": round(score, 3),
+        # The text the judge actually scored. Without it a judge score cannot
+        # be audited or re-scored by an independent rater, which is what the
+        # credibility cross-check needs.
+        "report": report,
+        "rubric": item["rubric"],
         "det_failures": failures,
         "risk_level": state.get("risk_level"),
         "detection_count": sum(
@@ -123,9 +128,26 @@ def evaluate_one(agent: InspectionAgent, item: dict,
     }
 
 
+def select_items(items: list[dict], spec: str | None) -> tuple[list[dict], list[str]]:
+    """Filter the golden set by a comma-separated id spec.
+
+    Returns ``(selected, missing)`` rather than raising, so the caller can
+    report which ids were wrong instead of silently evaluating nothing. An
+    empty spec selects everything; order follows the golden set, not the spec.
+    """
+    if not spec:
+        return items, []
+    wanted = [x.strip() for x in spec.split(",") if x.strip()]
+    known = {i["id"] for i in items}
+    missing = [w for w in wanted if w not in known]
+    return [i for i in items if i["id"] in set(wanted)], missing
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run the golden-set evaluation")
-    ap.add_argument("--id", help="run only this golden-set entry id")
+    ap.add_argument("--id", help="run only these golden-set entry ids "
+                                 "(comma-separated). A subset is enough to "
+                                 "hand-audit the judge on a few images.")
     ap.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD,
                     help=f"overall score threshold (default {DEFAULT_THRESHOLD})")
     ap.add_argument("--skip-judge", action="store_true",
@@ -143,9 +165,9 @@ def main() -> int:
 
     items = _load_golden_set()
     if args.id:
-        items = [i for i in items if i["id"] == args.id]
-        if not items:
-            print(f"ERROR: id '{args.id}' not in golden set", file=sys.stderr)
+        items, missing = select_items(items, args.id)
+        if missing:
+            print(f"ERROR: id(s) not in golden set: {missing}", file=sys.stderr)
             return 2
 
     print(f"Running evaluation on {len(items)} image(s); threshold={args.threshold}; "

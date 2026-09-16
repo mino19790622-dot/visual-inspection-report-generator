@@ -1,0 +1,182 @@
+{
+  "chunking_fingerprint": {
+    "chunk_size": 600,
+    "chunk_overlap": 100,
+    "min_chunk_len": 50,
+    "split_rule": "\\n(?=##)",
+    "standards_sha256": {
+      "construction_site_safety.md": "cea194d0a4be0464d59e295fca8e95354addbb684d5eacfae9f7cbd9d90187ec",
+      "environmental_site_inspection.md": "c97da20a677f3d836a2fd57bfd85061981f2e96254f671d7f7936a8d1910c9af",
+      "infrastructure_crack_assessment.md": "4b39d543d50e5706a19bb2a69657a77f708e2bac456867a95b61984a89e0fdb5",
+      "pedestrian_safety.md": "3e57e5148af7f977100873cdae8059f3646733ff867143e5f760afe16e6daca0",
+      "public_transport_safety.md": "7263a930462e84ce6d363af940fb1ec94c36a64660e5336c7d5e6758a298e6bf",
+      "road_surface_inspection.md": "d7e1b8fad976fc3b2a9f4619d9f4c25dc183d7fed721e1fcb5382d363be41d43"
+    }
+  },
+  "corpus_chunks_total": 50,
+  "applied_interpretation": [
+    "Relevant = a clause whose subject matter governs a CONDITION observable in the scene.",
+    "Excluded by rule: file title, '## Standard ID', '## Scope' (applicability metadata),",
+    "and '## Required Inspection Actions' (standard-level boilerplate true of any scene",
+    "under that standard). Including them would make recall@k trivially satisfiable.",
+    "Clauses about parts of the scene not observable (e.g. bus interior in an exterior",
+    "street shot) are excluded."
+  ],
+  "pass1_note": "first independent pass; inclusive reading",
+  "pass2_note": "second independent pass; strict reading",
+  "pass1": {
+    "bus_street_side": [
+      "public_transport_safety.md::3",
+      "public_transport_safety.md::5",
+      "public_transport_safety.md::6",
+      "public_transport_safety.md::7",
+      "pedestrian_safety.md::4",
+      "pedestrian_safety.md::8"
+    ],
+    "construction_foundation_aerial": [
+      "construction_site_safety.md::3",
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::4"
+    ],
+    "large_building_aerial": [
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::4",
+      "environmental_site_inspection.md::7"
+    ],
+    "marina_aerial": [],
+    "industrial_red_soil": [
+      "construction_site_safety.md::3",
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::4",
+      "environmental_site_inspection.md::5"
+    ],
+    "children_group": [
+      "pedestrian_safety.md::8",
+      "pedestrian_safety.md::6"
+    ],
+    "parking_lot_aerial": [
+      "road_surface_inspection.md::7"
+    ],
+    "port_construction": [
+      "construction_site_safety.md::3",
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::3",
+      "environmental_site_inspection.md::5"
+    ],
+    "industrial_lot_aerial": [
+      "construction_site_safety.md::3",
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::4",
+      "environmental_site_inspection.md::7"
+    ],
+    "beach_walkers": [
+      "pedestrian_safety.md::3",
+      "pedestrian_safety.md::8"
+    ]
+  },
+  "pass2": {
+    "bus_street_side": [
+      "public_transport_safety.md::5",
+      "public_transport_safety.md::7",
+      "pedestrian_safety.md::8"
+    ],
+    "construction_foundation_aerial": [
+      "construction_site_safety.md::3",
+      "construction_site_safety.md::4"
+    ],
+    "large_building_aerial": [
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::7"
+    ],
+    "marina_aerial": [],
+    "industrial_red_soil": [
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::4",
+      "environmental_site_inspection.md::5"
+    ],
+    "children_group": [
+      "pedestrian_safety.md::8"
+    ],
+    "parking_lot_aerial": [
+      "road_surface_inspection.md::7"
+    ],
+    "port_construction": [
+      "construction_site_safety.md::3",
+      "construction_site_safety.md::4"
+    ],
+    "industrial_lot_aerial": [
+      "construction_site_safety.md::4",
+      "environmental_site_inspection.md::7"
+    ],
+    "beach_walkers": [
+      "pedestrian_safety.md::3",
+      "pedestrian_safety.md::8"
+    ]
+  },
+  "jaccard_by_item": {
+    "bus_street_side": 0.5,
+    "construction_foundation_aerial": 0.667,
+    "large_building_aerial": 0.667,
+    "marina_aerial": 1.0,
+    "industrial_red_soil": 0.75,
+    "children_group": 0.5,
+    "parking_lot_aerial": 1.0,
+    "port_construction": 0.5,
+    "industrial_lot_aerial": 0.5,
+    "beach_walkers": 1.0
+  },
+  "jaccard_mean": 0.708,
+  "disagreement_rate": 0.292,
+  "pass2_separation_hours": 0.0,
+  "pass2_separation_caveat": "Both passes were performed in the SAME session, NOT >=24h apart as ANNOTATION.md s5 measure 3 specifies. A same-session second pass is correlated with the first, so the reported disagreement rate is a LOWER bound on true instability. This is a deviation from the committed protocol and is recorded rather than glossed.",
+  "resolution_rule": "Disagreements resolved by re-reading the clause against ANNOTATION.md s3.1. Pass-1 'extra' chunks were kept only where the clause governs an observable condition (pts::3 bus exterior KEPT; pts::6 accessibility DROPPED - no mobility aid observed; ped::4 crossings DROPPED - no crossing in scene; ped::6 crowd density DROPPED - no congestion; env::3 drainage DROPPED - site drainage, not a harbour; env::5 contamination for port DROPPED - no sheen/odour observed).",
+  "anchors": {
+    "construction_site_safety.md::3": {
+      "heading": "## Equipment Safety Zones",
+      "prefix40": "- **Excavator operation radius**: Minimu"
+    },
+    "construction_site_safety.md::4": {
+      "heading": "## Hazard Assessment Thresholds",
+      "prefix40": "- **Standing water**: > 10cm depth = sli"
+    },
+    "environmental_site_inspection.md::4": {
+      "heading": "### Soil Erosion",
+      "prefix40": "- **Sheet erosion**: Uniform soil loss. "
+    },
+    "environmental_site_inspection.md::5": {
+      "heading": "### Contamination Indicators",
+      "prefix40": "- **Discoloration**: Unusual soil color "
+    },
+    "environmental_site_inspection.md::7": {
+      "heading": "## Waste Management",
+      "prefix40": "- **Segregation**: General waste, recycl"
+    },
+    "pedestrian_safety.md::3": {
+      "heading": "### Surface Condition",
+      "prefix40": "- **Slip resistance**: Pendulum test val"
+    },
+    "pedestrian_safety.md::8": {
+      "heading": "### Personnel Counting",
+      "prefix40": "- **Group identification**: Identify and"
+    },
+    "public_transport_safety.md::3": {
+      "heading": "### Exterior",
+      "prefix40": "- **Body panels**: No sharp protrusions,"
+    },
+    "public_transport_safety.md::5": {
+      "heading": "### Infrastructure",
+      "prefix40": "- **Shelter condition**: No broken panel"
+    },
+    "public_transport_safety.md::7": {
+      "heading": "## Pedestrian Interaction",
+      "prefix40": "- **Bus stop clearance**: No parked vehi"
+    },
+    "road_surface_inspection.md::7": {
+      "heading": "## Road Marking Condition",
+      "prefix40": "- **Visibility**: Day and night visibili"
+    }
+  },
+  "truth_items_with_nonempty_set": 9,
+  "truth_items_empty": 1,
+  "truth_chunks_total": 24
+}
