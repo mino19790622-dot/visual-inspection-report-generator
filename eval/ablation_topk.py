@@ -37,8 +37,9 @@ HONESTY RULES (phase-C prompt 2.2)
   summary says "spent more", not "strategy better".
 * If agentic is worse than fixed, that is reported too — negative results are
   this repo's signature.
-* No recall@k / MRR: those need retrieval ground truth, which phase B produces.
-  Computing them here would be meaningless, so they are absent by design.
+* No recall@k / MRR here: those are computed by eval/retrieval_eval.py against
+  the retrieval ground truth (protocol: eval/golden_set/ANNOTATION.md). Computing
+  them in this harness would be meaningless, so they are absent by design.
 
 Usage
 -----
@@ -253,8 +254,9 @@ def main() -> int:
         "temperature": "grounding=0.0; vlm=configured; 1 repetition",
         "design": ("off=v1.0 narrative baseline; fixed=k=MAX_K injected; "
                    "agentic=model decides k (clamped 1-5). Metrics from "
-                   "app.citations.check_findings. No recall@k/MRR (no "
-                   "retrieval ground truth yet — phase B)."),
+                   "app.citations.check_findings. No recall@k/MRR in this "
+                   "harness — see eval/retrieval_eval.py, which computes them "
+                   "against the retrieval ground truth."),
         "aggregates": by_arm,
         "per_image": per_image,
         "honesty_note": honest_note,
@@ -268,7 +270,8 @@ def main() -> int:
 
     # Console summary
     print("\n" + "=" * 64)
-    print("ABLATION SUMMARY  (n=%d, provisional judge threshold)" % len(items))
+    print("ABLATION SUMMARY  (n=%d, judge threshold is a reference value, "
+          "not a gate)" % len(items))
     print("=" * 64)
     for mode in args.arms:
         a = by_arm[mode]
