@@ -120,6 +120,17 @@ jobs:
           fi
           python -m eval.ablation_topk $ARGS --out reports/ablation/ci-run.json
 
+      - name: Derive the three-arm cost table
+        # Reads the ablation artifact and prices it with config/pricing.yaml,
+        # so the money in the README is reproducible from the run, not typed
+        # in by hand after the fact.
+        if: ${{ github.event.inputs.mode == 'ablation' }}
+        run: |
+          mkdir -p reports/cost
+          python -m eval.cost_table \
+            --artifact reports/ablation/ci-run.json \
+            --out reports/cost/three-arm.json
+
       - name: Run retrieval evaluation (recall@k / MRR)
         if: ${{ github.event.inputs.mode == 'retrieval' }}
         env:
@@ -139,4 +150,5 @@ jobs:
             reports/eval/ci-run.json
             reports/ablation/ci-run.json
             reports/retrieval/ci-run.json
+            reports/cost/three-arm.json
           if-no-files-found: ignore
