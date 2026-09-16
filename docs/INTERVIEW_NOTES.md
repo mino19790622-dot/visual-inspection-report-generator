@@ -43,3 +43,17 @@ must not claim. Do not inflate these; the boundary is part of the material.
 - **Boundary (do NOT claim):** the rate table is still `null`, so **no real monetary cost has
   been produced yet** — the CNY cost column is pending (phase A). What exists today is the
   token accounting and the refusal to fabricate a number, not a cost result.
+
+### 4. A number with no provenance — I fixed the claim, not the date
+
+> "My README claimed a 'v1.0 baseline (Feb 2026): 4.28 / 5.0'. The date was before the
+> repository existed, and the score matched no run record I could find. The number that *was*
+> real was a 2026-08-21 evaluation at 4.475 / 5.0 (commit `2036d66`, run `32514897867`) — and
+> it ran *before* the `v1.0` tag, so 'the v1.0 baseline score' was never a thing: the tag froze
+> the code, not a measurement. I deleted the number instead of hunting for a date to put next
+> to it, because the honest correction was to the claim, not to the date."
+
+- **Boundary (do NOT claim):** this is a **documentation-accuracy fix, not a new evaluation
+  result** — no measurement was produced, and the only figure kept is the one traceable to a
+  cited run. It says nothing about model quality. The existing limits are unchanged: n = 10, and
+  the judge shares the measured model's family with a **provisional** threshold.
