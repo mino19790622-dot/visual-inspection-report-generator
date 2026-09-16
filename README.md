@@ -1,6 +1,5 @@
 # Visual Inspection Report Generator
 
-[![CI](https://github.com/mino19790622-dot/visual-inspection-report-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/mino19790622-dot/visual-inspection-report-generator/actions/workflows/ci.yml)
 [![regression](https://github.com/mino19790622-dot/visual-inspection-report-generator/actions/workflows/regression.yml/badge.svg)](https://github.com/mino19790622-dot/visual-inspection-report-generator/actions/workflows/regression.yml)
 
 AI-powered visual inspection system: object detection → VLM visual reasoning → RAG standards retrieval → structured inspection report.
@@ -57,12 +56,14 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 
 ```bash
 pip install -r requirements-ci.txt
-ruff check app tests
+ruff check app eval tests
 pytest --cov=app --cov-fail-under=80
 ```
 
-CI runs the same suite on every push/PR (`.github/workflows/ci.yml`), and `regression.yml` re-runs the
-deterministic grounded-generation tests on every push with zero API cost.
+The quality gate is split by cost: **every push runs the deterministic regression suite**
+(`.github/workflows/regression.yml` — all mocked, zero API cost, and the only per-push gate),
+while the **LLM golden-set evaluation is manual** (`.github/workflows/eval.yml` — needs a real
+key and spends money).
 
 ## Golden-Set Evaluation (MLOps quality gate)
 
@@ -288,8 +289,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │   ├── test_ablation.py           # v2
 │   └── …                          # detection / vlm / rag / agent / api / exporter / observability
 ├── .github/workflows/
-│   ├── ci.yml                     # ruff + pytest + coverage gate
-│   ├── regression.yml             # v2: deterministic regression on every push (zero API cost)
+│   ├── regression.yml             # the per-push gate: ruff + full mocked suite + coverage (zero API cost)
 │   ├── eval.yml                   # manual: golden-set eval OR 3-arm ablation
 │   └── deploy.yml                 # OIDC → ECR → ECS on push to main
 ├── data/                          # 6 inspection standards + sample test images
@@ -303,7 +303,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 
 ## Author
 
-**Mino Zhang** — AI Engineer building LLM-agent systems (tool calling, RAG, grounded citations) on a computer-vision foundation
+**Mino Zhang** — Builds LLM-agent systems with tool calling, retrieval-grounded citations and a zero-cost CI regression gate, on a 3-year computer-vision foundation
 - GitHub: [@mino19790622-dot](https://github.com/mino19790622-dot)
 - Background: 3 years CV algorithm engineering (PyTorch/YOLOX/TensorRT)
 - MSc Computer Science candidate @ Maynooth University, Ireland
