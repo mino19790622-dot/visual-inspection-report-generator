@@ -195,6 +195,29 @@ def evaluate_retrieval(retriever: StandardsRetriever, items: list[dict],
 
 
 # ----------------------------------------------------- G: generation (optional)
+def classify_verdict(truth: set[str], cited_truth: list[str],
+                     retrieved_truth: list[str], retrieval_calls: int) -> str:
+    """Name the layer-G outcome for one image.
+
+    The point of splitting R from G is to tell *why* a truth chunk never made
+    it into a finding. ``retrieved_unused`` (the retriever surfaced it, the
+    agent ignored it) and ``retrieval_miss`` (the retriever never surfaced it)
+    are retriever-vs-agent diagnoses. ``not_attempted`` is a third case that
+    must not be folded into either: the agent returned without calling the
+    retriever at all, so the layer-R ranking was never consulted and blaming
+    the retriever would be wrong.
+    """
+    if not truth:
+        return "not_scored_empty_truth"
+    if cited_truth:
+        return "used"
+    if retrieved_truth:
+        return "retrieved_unused"
+    if retrieval_calls == 0:
+        return "not_attempted"
+    return "retrieval_miss"
+
+
 def evaluate_grounding(retriever: StandardsRetriever, items: list[dict],
                        mode: str) -> dict[str, Any]:
     """Layer G — run the grounding agent on the scene text, then check citations.
@@ -216,15 +239,10 @@ def evaluate_grounding(retriever: StandardsRetriever, items: list[dict],
         cited_truth = sorted({c for c in cited if c in truth})
         retrieved_ids = {c.get("chunk_id") for c in report.retrieved}
         retrieved_truth = sorted(retrieved_ids & truth)
+        calls = sum(1 for c in report.tool_calls
+                    if c.get("tool") == "retrieve_standards")
 
-        if not truth:
-            verdict = "not_scored_empty_truth"
-        elif cited_truth:
-            verdict = "used"
-        elif retrieved_truth:
-            verdict = "retrieved_unused"
-        else:
-            verdict = "retrieval_miss"
+        verdict = classify_verdict(truth, cited_truth, retrieved_truth, calls)
 
         per_item.append({
             "id": it["id"],
@@ -236,9 +254,7 @@ def evaluate_grounding(retriever: StandardsRetriever, items: list[dict],
             "cited_truth_chunks": cited_truth,
             "verdict": verdict,
             "parse_failed": report.parse_failed,
-            "retrieval_calls": sum(
-                1 for c in report.tool_calls
-                if c.get("tool") == "retrieve_standards"),
+            "retrieval_calls": calls,
             "grounding_tokens": (report.usage or {}).get("total_tokens", 0),
         })
 
@@ -253,6 +269,8 @@ def evaluate_grounding(retriever: StandardsRetriever, items: list[dict],
             "mode": mode,
             "items_scored": len(scored),
             "verdict_distribution": dist,
+            "items_with_zero_retrieval_calls": sum(
+                1 for r in scored if r["retrieval_calls"] == 0),
             "mean_attribution_pass_rate": (round(sum(rates) / len(rates), 4)
                                            if rates else None),
             "total_findings": sum(r["findings"] for r in per_item),
@@ -261,6 +279,18 @@ def evaluate_grounding(retriever: StandardsRetriever, items: list[dict],
                                         for r in per_item),
             "citations_hallucinated": sum(r["citation_counts"]["hallucinated"]
                                           for r in per_item),
+        },
+        "inputs": {
+            "narrative": "golden_set[i]['scene'] (the human-written scene text)",
+            "detection_summary": "",
+            "caveat": ("This harness has no detector, so layer G runs with an "
+                       "empty detection summary. That is not the production "
+                       "configuration (image -> YOLO -> narrative -> grounding) "
+                       "and it is the reason agents decline to retrieve: with "
+                       "nothing detected there is little to ground. Read every "
+                       "layer-G verdict as conditional on these inputs, and "
+                       "check 'items_with_zero_retrieval_calls' before "
+                       "attributing anything to the retriever."),
         },
         "per_item": per_item,
     }
@@ -287,6 +317,9 @@ def print_report(retrieval: dict, grounding: dict | None, meta: dict) -> None:
         print(f"   items scored  : {g['items_scored']}")
         print(f"   attribution   : {g['mean_attribution_pass_rate']}")
         print(f"   verdicts      : {g['verdict_distribution']}")
+        print(f"   zero retrieval calls: {g['items_with_zero_retrieval_calls']}"
+              f"/{g['items_scored']}  (detections are empty in this harness;"
+              f" 'not_attempted' is not a retriever failure)")
         print(f"   citations     : ok={g['citations_ok']} "
               f"unresolved={g['citations_unresolved']} "
               f"hallucinated={g['citations_hallucinated']}")

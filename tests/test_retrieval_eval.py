@@ -109,3 +109,44 @@ class TestCommittedTruthIntegrity:
         items = re_.load_golden_set()
         empty = [it["id"] for it in items if not re_.truth_of(it)]
         assert empty == ["marina_aerial"]
+
+
+class TestClassifyVerdict:
+    TRUTH = {"a.md::0", "a.md::1"}
+
+    def test_empty_truth_is_not_scored(self):
+        assert re_.classify_verdict(set(), [], [], 0) == "not_scored_empty_truth"
+        # Even when work was done, an unannotated item stays unscored.
+        assert re_.classify_verdict(set(), ["x"], ["x"], 3) == \
+            "not_scored_empty_truth"
+
+    def test_cited_truth_is_used(self):
+        assert re_.classify_verdict(self.TRUTH, ["a.md::0"], ["a.md::0"], 2) \
+            == "used"
+
+    def test_truth_retrieved_but_not_cited_is_retrieved_unused(self):
+        assert re_.classify_verdict(self.TRUTH, [], ["a.md::1"], 2) \
+            == "retrieved_unused"
+
+    def test_zero_calls_is_not_attempted_not_a_retriever_miss(self):
+        # The regression this guards: an agent that never called the retriever
+        # used to be reported as retrieval_miss, which blames the retriever for
+        # a lookup that never happened.
+        assert re_.classify_verdict(self.TRUTH, [], [], 0) == "not_attempted"
+
+    def test_called_but_found_nothing_is_a_real_retrieval_miss(self):
+        assert re_.classify_verdict(self.TRUTH, [], [], 2) == "retrieval_miss"
+
+    def test_not_attempted_is_not_reachable_when_truth_was_cited(self):
+        # Precedence check: a hit beats the zero-call label.
+        assert re_.classify_verdict(self.TRUTH, ["a.md::0"], [], 0) == "used"
+
+    def test_every_verdict_name_is_distinct(self):
+        names = {
+            re_.classify_verdict(set(), [], [], 0),
+            re_.classify_verdict(self.TRUTH, ["a.md::0"], [], 1),
+            re_.classify_verdict(self.TRUTH, [], ["a.md::0"], 1),
+            re_.classify_verdict(self.TRUTH, [], [], 1),
+            re_.classify_verdict(self.TRUTH, [], [], 0),
+        }
+        assert len(names) == 5
