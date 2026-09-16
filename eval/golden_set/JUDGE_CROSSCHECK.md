@@ -107,3 +107,88 @@ The rule is fixed here so that a marginal result cannot be spun as a pass.
   general, only about this reader on these reports.
 - The rater could not see the images, so `scene_id` agreement is a weaker signal than the other
   three dimensions by construction.
+
+## 6. Result
+
+Judge scores and reports from run `35078726570`. Rater scores in
+`eval/golden_set/judge_crosscheck_scores.json`. Reproduce with:
+
+```
+python -m eval.judge_agreement \
+  --eval-artifact reports/eval/ci-run.json \
+  --hand eval/golden_set/judge_crosscheck_scores.json \
+  --threshold 3.7 --rater "independent rater (non-Qwen)"
+```
+
+**n = 10 images, 40 paired scores.**
+
+| Metric | Value |
+|---|---|
+| Exact agreement | 0.55 |
+| Within-1 agreement | **0.825** |
+| Mean \|difference\| | 0.725 |
+| **Signed mean difference (judge − rater)** | **−0.175** |
+| Spearman ρ (secondary) | 0.588 |
+| Images where the raters disagree on pass/fail | **1 / 10** |
+
+### Per dimension
+
+| Dimension | exact | within-1 | mean \|diff\| | judge mean | rater mean | signed |
+|---|---|---|---|---|---|---|
+| `scene_id` | 0.50 | 0.70 | 0.90 | 4.5 | 4.2 | +0.30 |
+| `safety` | 0.20 | 0.90 | 1.10 | 3.1 | 3.4 | −0.30 |
+| `domain_awareness` | 0.50 | 0.70 | 0.90 | 3.7 | 4.4 | **−0.70** |
+| `structure` | **1.00** | **1.00** | **0.00** | 5.0 | 5.0 | 0.00 |
+
+### What the result says
+
+**1. No evidence of family-affinity leniency — the sign is the wrong way for that story.** The
+signed mean difference is **−0.175**: the qwen judge scored slightly *lower* than the independent
+rater. Self-enhancement bias would push this positive. The largest single-dimension gap is
+`domain_awareness` at **−0.70**, where the judge was materially *stricter*. Whatever the gate's
+weakness is, "judge flatters its own family" is not what this measurement shows.
+
+**2. `structure` is the control case and it is perfect.** Exact agreement **1.00**, mean absolute
+difference **0.00**, over 10 images. This is the one dimension with a mechanical, checkable criterion
+(are the four section headers present), and both raters agree on every image. That is evidence the
+judge is tracking something real rather than emitting noise — and it is a useful internal check on
+the cross-check itself: if the whole comparison were broken, this row would not be clean.
+
+**3. The disagreement is concentrated where judgement is required.** `safety` has exact agreement of
+only **0.20** — four of every five safety scores differ — although 90% are within 1 point. The two
+raters bracket the same reports differently in the middle of the scale. This is the honest reading:
+the judge's *ordering* is roughly right, its *absolute* banding is not reproducible.
+
+**4. The aggregate verdict is robust; the per-image verdict is not.** Overall score is
+**4.445 under the judge** and **4.550 under the rater** — both pass 3.7 with margin. But
+`children_group` flips: judge `judge_avg` 2.25 → score 3.35 (**FAIL**), rater 3.25 → score 3.95
+(**PASS**). Both raters agree this is the worst image; they disagree on which side of the line it
+falls. Note the direction — the judge is *harsher*, so the error is conservative, not permissive.
+
+### Decision applied (pre-registered rule 4, third row)
+
+The rule was: *any image flips pass/fail* → downgrade the gate. One image flipped, so that action
+applies, and it is applied as written:
+
+- **3.7 is no longer presented as a per-image gate.** A single image's pass/fail at 3.7 is not
+  reproducible across raters at n = 10, so it must not be used as an acceptance decision.
+- **`judge_avg` is reported as a reference value**, with the measured disagreement published
+  alongside it (this section).
+- **The README's "passed 3.7" language is rewritten as a non-claim** — see the *Golden-set quality
+  gate* section.
+
+Two honest qualifications, offered as observations rather than as a softening of the rule:
+
+- The *aggregate* comparison **did** hold up (4.445 vs 4.550, both passing), so the 3.7 **aggregate**
+  reference retains information; it is the per-image use that is unsupported.
+- The observed bias direction is conservative. Had the sign been positive and large, the gate would
+  have been *permissive*; it is not.
+
+### Limitations of this result
+
+- The rater saw the judge's numeric scores for this run before scoring, so agreement may be
+  **inflated** by anchoring. The measured agreement is therefore an upper bound and the measured
+  bias magnitude a lower bound.
+- n = 10 images / 40 scores. One rater. No confidence interval is claimed.
+- The rater never saw the images, unlike the judge.
+

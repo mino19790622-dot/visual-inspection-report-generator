@@ -87,7 +87,7 @@ def _pearson(x: list[float], y: list[float]) -> float | None:
     if n < 2:
         return None
     mx, my = sum(x) / n, sum(y) / n
-    num = sum((a - mx) * (b - my) for a, b in zip(x, y))
+    num = sum((a - mx) * (b - my) for a, b in zip(x, y, strict=True))
     dx = sum((a - mx) ** 2 for a in x) ** 0.5
     dy = sum((b - my) ** 2 for b in y) ** 0.5
     if dx == 0 or dy == 0:
@@ -126,11 +126,11 @@ def agreement(judge: dict[str, dict[str, int]],
             "within_1": within1,
             "exact_rate": round(exact / n, 3) if n else None,
             "within_1_rate": round(within1 / n, 3) if n else None,
-            "mean_abs_diff": (round(sum(abs(a - b) for a, b in zip(j_vals, h_vals)) / n, 3)
+            "mean_abs_diff": (round(sum(abs(a - b) for a, b in zip(j_vals, h_vals, strict=True)) / n, 3)
                               if n else None),
             "mean_judge": round(sum(j_vals) / n, 3) if n else None,
             "mean_rater": round(sum(h_vals) / n, 3) if n else None,
-            "signed_mean_diff": (round(sum(a - b for a, b in zip(j_vals, h_vals)) / n, 3)
+            "signed_mean_diff": (round(sum(a - b for a, b in zip(j_vals, h_vals, strict=True)) / n, 3)
                                  if n else None),
             "spearman": (round(spearman(j_vals, h_vals), 3)
                          if spearman(j_vals, h_vals) is not None else None),

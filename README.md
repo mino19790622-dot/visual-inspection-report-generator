@@ -108,33 +108,207 @@ grounding temperature 0, one pass per image.
   retrieval calls and ~2.5× the grounding tokens (53.4k vs 21.3k). Within n=10 this reads as
   **"spent more", not "strategy better"** — the extra cost is the multi-round tool loop. We do **not**
   claim agentic is superior.
+- The "+1 finding" is a **net**, and it hides churn in both directions: `agentic` gained 3 findings
+  across two images (`large_building_aerial` 0→1, `industrial_lot_aerial` 1→3) and **lost 2** across
+  two others (`bus_street_side` 1→0, `construction_foundation_aerial` 3→2). So it is not "one extra
+  finding" — it is a different set of findings that happens to be one larger. See *Cost & Latency* for
+  what that churn cost.
+
+### Retrieval quality — recall@k / MRR
+
+Run `35079424448` (`eval/retrieval_eval.py`, mode `retrieval`, `grounding=none`), commit `0f2720b`.
+Ground truth is the `retrieval_truth` annotation in `eval/golden_set/golden_set.json`; the protocol is
+in `eval/golden_set/ANNOTATION.md` and was committed *before* any truth was written. **n = 9 scored**
+(`marina_aerial` is excluded — it has no applicable clause, and scoring it would invent either a
+success or a failure). Corpus: 50 chunks across 6 standards.
+
+| k | 1 | 2 | 3 | 5 | 10 |
+|---|---|---|---|---|---|
+| **recall@k** (n = 9) | 0.0556 | 0.1389 | 0.1389 | 0.3426 | 0.5370 |
+
+**MRR = 0.4074** (n = 9). **2 of 9** images have no truth chunk anywhere in the top-10.
+
+`k = 5` is the depth `fixed` uses and `k = 2` the depth `agentic` modal-chooses, so rows 5 and 2 are
+the two that correspond to the arms actually in use.
+
+> **What the query was.** These numbers use the golden set's `scene` text as the query string. In
+> production the query is the VLM *narrative*, which is longer and differently worded. These figures
+> therefore characterise the retriever under a fixed, reproducible query — not the deployed query
+> distribution. The artifact records this as `query_source_caveat`.
+
+**Where the failure is — and it is not routing.** recall@k alone cannot distinguish "went to the
+wrong standards file" from "went to the right file, ranked the wrong clause", and those need
+different fixes. Splitting them (`routing_diagnostic`) is unambiguous at this n:
+
+| Diagnostic | Result |
+|---|---|
+| Rank 1 comes from a standard that appears in the truth | **4 / 9** |
+| *Any* truth standard present anywhere in the top-10 | **9 / 9** |
+| *Every* truth standard present in the top-10 | **9 / 9** |
+
+The retriever **always reaches the right standards file** and then ranks the wrong clauses inside it.
+Concretely: for `beach_walkers` the truth is `pedestrian_safety.md::3` and `::8`, and 7 of the top-10
+chunks come from `pedestrian_safety.md` — but at positions 1, 2, 4, 5, 7, 8, 9, never 3 or 8.
+
+So the fix belongs in **clause-level ordering (chunking, reranking, or a standards-aware score)**,
+not in query routing or a discipline filter. That is the single most actionable result in this
+section, and it is the opposite of what a bare recall number would suggest.
+
+**Retrieval and generation are reported separately.** Layer R (above) and layer G are computed from
+the same run but never blended, so a missing citation can be attributed to one or the other. Layer G
+below is from run `35075045463` (`grounding=agentic`), which is the run where the agentic arm was
+actually exercised:
+
+| Layer-G verdict | Count | Meaning |
+|---|---|---|
+| `not_attempted` | 7 / 9 | the agent returned **without calling the retriever at all** |
+| `retrieval_miss` | 1 / 9 | it called, and no truth chunk came back |
+| `retrieved_unused` | 1 / 9 | a truth chunk came back and was not cited |
+
+> **Layer G is confounded in this harness and must not be read as a retriever verdict.** The harness
+> has no detector, so it runs the grounding agent with an empty `detection_summary`, which is *not*
+> the production input (image → YOLO → narrative → grounding). With nothing detected, the agent
+> declines to retrieve on 7 of 9 images and returns **zero findings in total**. `not_attempted` is
+> therefore kept as a separate verdict rather than folded into `retrieval_miss`: blaming the
+> retriever for a lookup that never happened would be the opposite of what this split is for. What
+> layer G *does* establish is that the full `retrieved_unused` chain is reachable and is observed —
+> see the variance note below.
+
+> **Reproducibility, and a limit on it.** Layer R gave **identical** numbers on three independent runs
+> (`recall@1 0.0556 … MRR 0.4074` on `35073538882`, `35075045463`, `35079424448`), including once with
+> grounding disabled, so the ranking result is stable. Layer G did **not** reproduce: at grounding
+> temperature 0, `industrial_lot_aerial` produced 1 finding citing truth (`used`) on run
+> `35073538882` and 0 findings with truth retrieved but uncited (`retrieved_unused`) on
+> `35075045463`. Treat layer-G per-image verdicts as single-sample observations, not measurements.
+
+> **Annotation instability.** Truth was annotated in two independent passes; mean Jaccard agreement
+> was **0.708** (disagreement 29.2%). Both passes ran in the same session rather than ≥24 h apart, so
+> 0.292 is a **lower bound** on the instability. This is recorded in
+> `eval/golden_set/retrieval_truth_meta.json`, not smoothed over.
+
+> **n = 9 is not enough for a confidence claim.** A 95% interval on a proportion at n = 9 spans
+> roughly ±0.25–0.30. Every number above is directional. See `ANNOTATION.md` §6 for the expansion
+> recommendation and §7 for why a three-way calibration/tuning/test split is infeasible at this size
+> (the whole set is the test set, and tuning retriever parameters against it is prohibited).
 
 ### Golden-set quality gate
 
 | Metric | Value | Notes |
 |---|---|---|
-| Overall quality score | **4.33 / 5.0** | threshold 3.7; eval run `35008709697` (agentic) |
+| Overall quality score | **4.445 / 5.0** | eval run `35078726570` (agentic), judge-scored |
+| Overall, independent rater | **4.550 / 5.0** | same run, non-Qwen rater, report-only — see below |
 | VLM tokens / 10 images | ~18.1k | consistent across arms (18.1–18.3k) |
+| 3.7 threshold | **reference value, not a gate** | see *Judge credibility* below |
+
+> **Judge credibility is now measured, and 3.7 is downgraded to a reference.** A pre-registered
+> cross-check against an independent non-Qwen rater (`eval/golden_set/JUDGE_CROSSCHECK.md`, n = 10
+> images / 40 paired scores) found:
+>
+> - **No evidence of self-enhancement bias.** Signed mean difference (judge − rater) = **−0.175**;
+>   the judge is marginally *stricter*, not more lenient. The largest single gap is
+>   `domain_awareness` at −0.70, again stricter.
+> - **`structure` agrees perfectly** (exact 1.00, mean |diff| 0.00), which is the dimension with a
+>   mechanical criterion — evidence the judge is measuring something real.
+> - **But absolute banding is not reproducible.** Exact agreement 0.55 overall; `safety` only **0.20**
+>   (90% within 1 point). One image, `children_group`, flips verdict: judge 2.25 → score 3.35 (FAIL),
+>   rater 3.25 → score 3.95 (PASS). The judge being the harsher one makes the error conservative.
+> - The **aggregate** comparison held (4.445 vs 4.550, both well above 3.7), so the aggregate
+>   reference still carries information; it is the **per-image** use of 3.7 that is unsupported.
+>
+> Consequently: do not read a single image's 3.7 pass/fail as an acceptance decision, and do not
+> read "overall passed 3.7" as a validated quality claim. `judge_avg` is a reference value with the
+> disagreement above published beside it.
 
 > **Variance caveat.** These are single-pass runs. A second agentic pass produced different per-image
 > findings (e.g. `large_building_aerial`: 3 findings in the gate run vs 1 in the ablation), and the
 > `fixed` arm hit 1/10 parse failures while `agentic` hit 0/10. Treat per-image counts as noisy; the
 > aggregate claims above are the ones we stand behind.
 
-> **Judge threshold is provisional.** 3.7 is a starting gate, not a calibrated threshold. Judge
-> credibility (incl. self-enhancement bias, judge + measured model both Qwen-family) is verified in
-> phase B. Do not read "passed 3.7" as "validated for production."
+> **Judge credibility: checked, and the result changed the gate's status.** The judge and the
+> measured models are the same family, so a self-enhancement bias was possible; it is now measured
+> rather than assumed. The check found no evidence of leniency (the judge is marginally *stricter*)
+> but did find that absolute per-image banding is not reproducible — see the note above and
+> `eval/golden_set/JUDGE_CROSSCHECK.md`. The check was pre-registered before scoring, and it used the
+> *substitute* route (blind independent scoring) because a different-family vision judge
+> (`kimi-k2.5` on Model Studio) needs a separate endpoint and entitlement rather than a free
+> model-name swap.
 
 ## Cost & Latency
 
 Token usage is measured from the API response and recorded per stage in `logs/inspect_spans.jsonl`.
 Money is **derived** from `config/pricing.yaml` (a versioned price snapshot), never estimated in code.
 
+**Rate snapshot: `effective_date: 2026-09-16`, currency CNY, China (Beijing) region, pay-as-you-go**,
+taken from the Alibaba Cloud Model Studio (百炼) price tables and cited in `config/pricing.yaml`.
+
+| Model | Input / 1k tokens | Output / 1k tokens |
+|---|---|---|
+| `qwen-vl-max` (VLM narrative) | 0.0016 | 0.004 |
+| `qwen-plus` (grounding) | 0.0008 | 0.002 |
+| `text-embedding-v2` (retrieval) | 0.0007 | free (input-only model) |
+| `qwen-turbo` (judge) | 0.0003 | 0.0006 |
+
+### Three-arm cost per image
+
+Derived by `eval/cost_table.py` from ablation run `35018667423` (n = 10), which is also a CI step in
+ablation mode. **Costs are ranges, not point values** — see the bracket note below.
+
+| Arm | Findings | Retrieval calls / image | VLM tokens | Grounding tokens | Cost / image (CNY) |
+|---|---|---|---|---|---|
+| `off` | 0 | 0.0 | 18,116 | 0 | 0.002899 – 0.007246 |
+| `fixed` | 5 | 1.0 | 18,286 | 21,305 | 0.004630 – 0.011575 |
+| `agentic` | 6 | 1.8 | 18,108 | 53,352 | 0.007165 – 0.017914 |
+
+The VLM token count is flat across arms (18.1–18.3k). Everything an arm costs on top of `off` is
+grounding: **~2.5×** for `fixed`, **~2.9×** for `agentic` relative to `fixed`'s grounding spend.
+
+> **Why a range.** `eval/ablation_topk.py` records `prompt_tokens + completion_tokens` as one
+> number. Input and output are priced differently, and the split is not in the artifact, so a point
+> cost is not derivable from what was recorded. The two ends are the same token total priced
+> entirely as input and entirely as output; the truth is inside. Narrowing it needs a change in the
+> recorder, not an assumption here. **No rate in this table was estimated.**
+
+### What the extra agentic finding cost
+
+`agentic` produced 6 findings against `fixed`'s 5 — a **net** +1. That figure is a net, and reading
+it as "one more useful finding" would be wrong:
+
+| Image | Findings `fixed → agentic` | Retrieval calls | Grounding tokens |
+|---|---|---|---|
+| `bus_street_side` | 1 → 0 (**−1**) | 1 → 3 | 1,960 → 7,900 |
+| `construction_foundation_aerial` | 3 → 2 (**−1**) | 1 → 6 | 2,754 → 5,173 |
+| `large_building_aerial` | 0 → 1 (**+1**) | 1 → 5 | 2,021 → 19,421 |
+| `industrial_lot_aerial` | 1 → 3 (**+2**) | 1 → 1 | 2,141 → 4,326 |
+
+Per-image counts move in **both directions** — 3 gained across two images, 2 lost across two others.
+The honest unit price is therefore *cost per net finding*, not cost per extra finding:
+
+- **+8 retrieval calls** and **+32,047 grounding tokens** across the 10 images;
+- **+0.02535 – 0.06339 CNY** for the whole set, i.e. **+0.002535 – 0.006339 CNY per image**;
+- **0.0254 – 0.0634 CNY per net extra finding** (≈ +55% per-image cost for a +20% finding count).
+
+**Verdict: not demonstrated to be worth it.** No measured quality axis improved — attribution pass
+rate is 100% for both arms and deterministic checks are 10/10 for both. The one axis that moved is
+a raw count that also fell on other images, and the cost is concentrated: `large_building_aerial`
+alone spent 19,421 grounding tokens (~10× `fixed`) to turn 0 findings into 1. On this evidence the
+agentic arm's extra spend is not justified; the `fixed` arm is the better default until an
+end-to-end metric (not a finding count) shows otherwise.
+
+### Declared gaps (not estimated)
+
+- **Input/output split** — not recorded, hence the brackets above.
+- **Embedding cost** — `text-embedding-v2` calls are not priced into these figures: the artifact
+  counts retrieval *calls*, not the embedding tokens a call consumes. So the retrieval side of every
+  arm is understated by an unknown amount. At 0.0007 CNY/1k input this is small relative to the
+  grounding spend, but it is unmeasured, not assumed to be zero.
+- **Judge cost** — `qwen-turbo` scores are optional and `mean_judge` is `null` in this run, so judge
+  spend is not derivable from the artifact.
+
 | Metric | Value | Notes |
 |---|---|---|
 | VLM tokens / 10 images | ~18.1k | nearly identical across arms (18.1–18.3k) — grounding does not change the VLM call |
 | Grounding tokens / 10 images | `off` 0 · `fixed` 21.3k · `agentic` 53.4k | agentic's multi-round tool loop is ~2.5× `fixed` |
-| Cost in CNY | **TBD** | `config/pricing.yaml` rates are `null` → `known=False`; filled in phase A. Never rendered as 0.0 |
+| Cost in CNY | `off` 0.0029–0.0072 · `fixed` 0.0046–0.0116 · `agentic` 0.0072–0.0179 per image | snapshot 2026-09-16; ranges because the in/out split is unrecorded |
 | Latency / stage | measured | detect / VLM / ground / export per request in the trace JSONL |
 
 ## Limitations
@@ -142,11 +316,28 @@ Money is **derived** from `config/pricing.yaml` (a versioned price snapshot), ne
 Stated up front — not as a disclaimer but as the boundary of what the numbers above mean:
 
 - **Sample size n = 10.** Every measured number is directional, not a benchmark. There is no held-out test split and no stratified sampling.
-- **Judge bias unverified.** The LLM judge (`qwen-turbo`) and the measured models (`qwen-plus` / `qwen-vl-max`) are the same family, so a self-enhancement bias cannot be ruled out. Scheduled for the phase-B credibility check, not resolved here.
+- **Judge credibility is measured, and it constrains how the gate may be used.** The self-enhancement
+  bias that worried us was **not** found — signed mean difference (judge − rater) is −0.175, i.e. the
+  judge is marginally stricter. But exact agreement with an independent rater is only 0.55
+  (`safety`: 0.20) and one image flips pass/fail, so **3.7 is a reference value, not a per-image
+  acceptance gate**, and "overall passed 3.7" is not a quality claim. Single rater, n = 10, and the
+  rater had seen the judge's numbers beforehand, so agreement may be **inflated** — the measured
+  agreement is an upper bound.
 - **Single-node, single-tenant, offline batch evaluation.** No orchestration/scheduling layer, no horizontal scaling, no multi-tenant isolation — the API serves one process.
 - **Not deployed on Kubernetes.** Container orchestration stops at AWS ECS Fargate; there are no K8s manifests, autoscalers, or service mesh.
-- **Cost is CNY and currently unfilled.** `config/pricing.yaml` ships with `null` rates, so cost reports `known=False`; no real monetary figure has been produced yet (phase A).
-- **Retrieval quality is unmeasured.** No retrieval ground truth exists yet, so no recall@k / MRR is reported.
+- **Cost is now filled, but as a range and not for the whole pipeline.** `config/pricing.yaml` carries
+  real rates as of 2026-09-16 (CNY), so `known=True` for the four billed models. Two gaps remain and
+  are declared rather than covered: costs are reported as `[floor, ceiling]` brackets because the
+  ablation artifact does not record the input/output token split, and embedding + judge spend is not
+  derivable from it at all. See *Cost & Latency*.
+- **Retrieval quality is measured, and it is weak.** recall@k / MRR now exist over annotated ground
+  truth — see *Retrieval quality* — and the headline is that recall@10 is ~0.54 while every truth
+  standard is reached. Read the section before quoting a single number: n = 9, one annotator, and
+  ground truth is pinned to a specific chunking configuration.
+- **Retrieval ground truth is pinned to the current chunking.** Truth is stored as `chunk_id`
+  (`<file>.md::<index>`), which is a pure function of `CHUNK_SIZE` / `CHUNK_OVERLAP` / the split
+  rule. Change any of those and the ids renumber silently. `eval/golden_set/retrieval_truth_meta.json`
+  records a fingerprint and `eval/retrieval_eval.py` refuses to run when it no longer matches.
 
 ## Observability
 
@@ -161,7 +352,7 @@ Every `/inspect` call appends one JSON line to `logs/inspect.jsonl` (path overri
  "total_latency_ms":2400,"saved":["report","annotated"]}
 ```
 
-A per-stage trace (spans + tokens) is written to `logs/inspect_spans.jsonl`. `cost_rmb` stays `null` until the price snapshot is filled, and `top_k` is now the depth the grounding agent chose for this request (not a risk-level lookup). Cost is **derived** from `config/pricing.yaml` (a versioned price snapshot), not hard-coded in code; until rates are filled it reports `known=False` and is **never rendered as 0.0** — see `app/observability/pricing.py`.
+A per-stage trace (spans + tokens) is written to `logs/inspect_spans.jsonl`. `top_k` is now the depth the grounding agent chose for this request (not a risk-level lookup). Cost is **derived** from `config/pricing.yaml` (a versioned price snapshot, real rates as of 2026-09-16), not hard-coded in code. A stage whose model has no rate reports `known=False` with `cost: null` and is **never rendered as 0.0** — see `app/observability/pricing.py`.
 
 ## Quick Start
 ```bash
