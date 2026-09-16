@@ -1,9 +1,14 @@
 name: eval
 
-# LLM-costing evaluation workflows, triggered manually (workflow_dispatch) so we
-# control cost. Two modes:
-#   eval     — golden-set quality gate (VLM narrative + LLM judge, threshold-gated)
-#   ablation — 3-arm tool-calling ablation (off / fixed / agentic), eval/ablation_topk.py
+# Costing evaluation workflows, triggered manually (workflow_dispatch) so we
+# control cost. Three modes:
+#   eval      — golden-set quality gate (VLM narrative + LLM judge, threshold-gated)
+#   ablation  — 3-arm tool-calling ablation (off / fixed / agentic), eval/ablation_topk.py
+#   retrieval — recall@k / MRR against the annotated retrieval truth, plus an
+#               optional grounding pass that localises each miss
+#               (retrieval_miss vs retrieved_unused). eval/retrieval_eval.py
+#               needs only the embedding model, so the ONNX/AWS steps are
+#               skipped in this mode.
 # Requires the DASHSCOPE_API_KEY repository secret.
 #
 # NOTE: this workflow is dispatchable pre-merge because it already exists on the
@@ -15,9 +20,9 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "eval = golden-set quality gate; ablation = 3-arm tool-calling comparison"
+        description: "eval = golden-set quality gate; ablation = 3-arm tool-calling comparison; retrieval = recall@k/MRR vs annotated truth"
         type: choice
-        options: ["eval", "ablation"]
+        options: ["eval", "ablation", "retrieval"]
         default: "eval"
         required: true
       threshold:
@@ -36,6 +41,12 @@ on:
         description: "(ablation mode) also LLM-judge the narrative (extra cost): true/false"
         required: false
         default: "false"
+      grounding:
+        description: "(retrieval mode) also run layer G to localise misses. none = retrieval metrics only; fixed/agentic = run the grounding agent too (extra LLM cost)"
+        type: choice
+        options: ["none", "fixed", "agentic"]
+        default: "none"
+        required: false
 
 permissions:
   id-token: write      # required for OIDC -> AWS (S3 model download)
@@ -53,12 +64,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials (OIDC)
+        if: ${{ github.event.inputs.mode != 'retrieval' }}
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Fetch ONNX model from S3 (gitignored, not in repo)
+        if: ${{ github.event.inputs.mode != 'retrieval' }}
         run: aws s3 cp "$MODEL_S3_URI" yolov8m.onnx
 
       - name: Set up Python
@@ -80,7 +93,11 @@ jobs:
           restore-keys: chroma-eval-
 
       - name: Run golden-set evaluation
-        if: ${{ github.event.inputs.mode != 'ablation' }}
+        # `mode == 'eval'` (and the empty default when dispatched without input).
+        # Previously this was `mode != 'ablation'`, which also matched the new
+        # 'retrieval' mode and would have run the golden-set eval there too --
+        # failing, since retrieval mode deliberately skips the ONNX download.
+        if: ${{ github.event.inputs.mode == 'eval' || github.event.inputs.mode == '' }}
         env:
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         run: |
@@ -103,6 +120,16 @@ jobs:
           fi
           python -m eval.ablation_topk $ARGS --out reports/ablation/ci-run.json
 
+      - name: Run retrieval evaluation (recall@k / MRR)
+        if: ${{ github.event.inputs.mode == 'retrieval' }}
+        env:
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+        run: |
+          mkdir -p reports/retrieval
+          python -m eval.retrieval_eval \
+            --grounding-mode "${{ github.event.inputs.grounding || 'none' }}" \
+            --out reports/retrieval/ci-run.json
+
       - name: Upload eval artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -111,4 +138,5 @@ jobs:
           path: |
             reports/eval/ci-run.json
             reports/ablation/ci-run.json
+            reports/retrieval/ci-run.json
           if-no-files-found: ignore

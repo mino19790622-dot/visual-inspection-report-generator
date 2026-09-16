@@ -18,13 +18,21 @@ human-written rubric.
 
 - `golden_set/golden_set.json` — 10 images + per-image expectations
   (detection count range, must-mention keywords, safety vocabulary) + rubric
-  used by the judge.
+  used by the judge + **retrieval ground truth** (`retrieval_truth.chunk_ids`).
+- `golden_set/ANNOTATION.md` — the annotation protocol for that retrieval truth.
+  Committed *before* the truth itself, so `git log` proves the rules were fixed
+  before anything was labelled. Read it before trusting a recall number.
+- `golden_set/retrieval_truth_meta.json` — chunking fingerprint, per-chunk
+  anchors, and the two annotation passes with their disagreement rate.
 - `judge.py` — LLM-as-judge. Uses `qwen-turbo` (cheap text model) to score
   the VLM report on 4 dimensions: `scene_id`, `safety`, `domain_awareness`,
   `structure` (each 1–5).
 - `run_eval.py` — Runner. Builds the agent, runs it on each golden-set image
   (real VLM cost: ~10 calls), then judges the output. Returns per-image and
   overall scores; exits non-zero if below threshold.
+- `ablation_topk.py` — 3-arm tool-calling ablation (off / fixed / agentic).
+- `retrieval_eval.py` — retrieval-side metrics: recall@k and MRR against the
+  annotated truth, with an optional grounding pass that localises each miss.
 
 ## Run locally
 
@@ -45,13 +53,67 @@ python -m eval.run_eval --id bus_street_side
 python -m eval.run_eval --out eval/runs/run-$(date +%s).json
 ```
 
+## Retrieval evaluation (recall@k / MRR)
+
+Phase C could only measure *attribution* — whether a finding cited a chunk that
+really was retrieved. That answers "did the model invent a reference?", not "was
+the clause the finding needed retrievable at all?". `retrieval_eval.py` answers
+the second question against the annotated truth.
+
+```bash
+export DASHSCOPE_API_KEY=sk-...
+
+# retrieval metrics only (embedding calls only; no VLM, no ONNX model)
+python -m eval.retrieval_eval
+
+# also run the grounding layer to localise each miss (extra LLM cost)
+python -m eval.retrieval_eval --grounding-mode agentic
+```
+
+Two layers are reported **separately**, which is what makes a failure locatable:
+
+| layer | measures | needs |
+|---|---|---|
+| `R` retrieval | recall@k, MRR — ranking quality | embedding model |
+| `G` generation | which findings cite a *relevant* chunk | an LLM |
+
+Per item, the combination yields one of:
+
+- `retrieval_miss` — no truth clause in top-k (the retriever is at fault)
+- `retrieved_unused` — a truth clause was available but no finding cited it (the
+  generator is at fault)
+- `used` — a finding cited a truth clause
+
+### Integrity guards
+
+The truth is only valid for the chunking it was annotated against, so the runner
+**fails loudly** (rather than scoring 0) if:
+
+- a standards file's `sha256` differs from the recorded fingerprint, or
+- a truth `chunk_id` no longer resolves, or its anchor text is missing.
+
+### Known limits
+
+- Queries are the golden items' `scene` text, **not** the VLM narrative, so the
+  figures describe retrievability given an accurate description, not the
+  deployed path. Recorded in every output as `query_source_caveat`.
+- One item (`marina_aerial`) has an intentionally empty truth set; it is excluded
+  from the denominators and reported by id rather than scored.
+- The annotation was produced by a single annotator; the two-pass disagreement
+  rate is published in `retrieval_truth_meta.json` as an error bar on the truth.
+
 ## Run on GitHub Actions
 
-The `eval.yml` workflow runs the same command. It's **`workflow_dispatch` only**
-(manual trigger) to control LLM cost — every push would burn money.
+The `eval.yml` workflow runs these commands. It's **`workflow_dispatch` only**
+(manual trigger) to control cost — every push would burn money.
 
-Trigger from the Actions tab → "eval" → "Run workflow". You can override the
-threshold or run a single image.
+Trigger from the Actions tab → "eval" → "Run workflow". Three modes:
+
+| mode | runs | cost |
+|---|---|---|
+| `eval` | golden-set quality gate (VLM + LLM judge) | VLM + judge calls |
+| `ablation` | 3-arm tool-calling comparison | VLM + grounding LLM |
+| `retrieval` | recall@k / MRR vs annotated truth | embeddings only (set `grounding` to add the LLM layer) |
 
 **Required secret**: `DASHSCOPE_API_KEY` in
 Settings → Secrets and variables → Actions. Add it once (it's already the same
@@ -73,7 +135,11 @@ key used locally).
 
 1. Drop the image into `data/test_images/`.
 2. Append a new entry to `golden_set/golden_set.json` with: scene description,
-   `expect` (detection count range, keywords, safety flag), and a `rubric`
-   describing what a good report should cover.
-3. Run `python -m eval.run_eval --id <new_id>` to verify.
-4. Commit + push.
+   `expect` (detection count range, keywords, safety flag), a `rubric`
+   describing what a good report should cover, and a `retrieval_truth` block
+   (see `ANNOTATION.md` — annotate against the standards **before** looking at
+   what the retriever returns).
+3. Add the anchor entries for any new truth chunk ids to
+   `golden_set/retrieval_truth_meta.json`.
+4. Run `python -m eval.run_eval --id <new_id>` to verify.
+5. Commit + push.
