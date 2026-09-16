@@ -46,7 +46,7 @@ must not claim. Do not inflate these; the boundary is part of the material.
 
 ### 4. A number with no provenance — I fixed the claim, not the date
 
-> "My README claimed a 'v1.0 baseline (Feb 2026): 4.28 / 5.0'. The date was before the
+> "My README claimed a 'v1.0 baseline': 4.28 / 5.0. That date was months before the
 > repository existed, and the score matched no run record I could find. The number that *was*
 > real was a 2026-08-21 evaluation at 4.475 / 5.0 (commit `2036d66`, run `32514897867`) — and
 > it ran *before* the `v1.0` tag, so 'the v1.0 baseline score' was never a thing: the tag froze
