@@ -153,6 +153,38 @@ def rank_of_first_relevant(ranked: list[str], truth: list[str]) -> int | None:
     return None
 
 
+def standard_of(chunk_id: str) -> str:
+    """The standards file a chunk belongs to, i.e. ``<file>.md``."""
+    return chunk_id.split("::", 1)[0]
+
+
+def routing_diagnostic(ranked: list[str], truth: list[str]) -> dict[str, Any]:
+    """Did retrieval reach the right *standard*, or only the right-ish words?
+
+    recall@k conflates two failures that need different fixes:
+
+    * the retriever never reaches the correct standard file -- a routing
+      problem, addressable through query construction or a discipline filter;
+    * it reaches the right file but ranks the wrong clauses inside it -- a
+      granularity problem, addressable through chunking or reranking.
+
+    This splits them using the same ``top_k_ranked`` list the recall numbers
+    are computed from, so the two diagnostics can never disagree about what was
+    actually retrieved.
+    """
+    if not truth:
+        return {}
+    truth_standards = {standard_of(c) for c in truth}
+    top_standards = {standard_of(c) for c in ranked}
+    return {
+        "truth_standards": sorted(truth_standards),
+        "top1_is_truth_standard": (standard_of(ranked[0]) in truth_standards
+                                   if ranked else False),
+        "any_truth_standard_in_topk": bool(top_standards & truth_standards),
+        "all_truth_standards_in_topk": truth_standards <= top_standards,
+    }
+
+
 def evaluate_retrieval(retriever: StandardsRetriever, items: list[dict],
                        k_grid: tuple[int, ...] = K_GRID) -> dict[str, Any]:
     """Layer R — pure ranking quality over items that have a truth set."""
@@ -168,6 +200,7 @@ def evaluate_retrieval(retriever: StandardsRetriever, items: list[dict],
             "top_k_ranked": ranked,
             "first_relevant_rank": rank_of_first_relevant(ranked, truth),
             "retrieved_any_truth": bool(set(ranked) & set(truth)),
+            **routing_diagnostic(ranked, truth),
         }
         if truth:
             for k in k_grid:
@@ -191,6 +224,15 @@ def evaluate_retrieval(retriever: StandardsRetriever, items: list[dict],
     agg["mrr"] = round(sum(rrs) / len(rrs), 4) if rrs else None
     agg["items_with_no_truth_in_topk"] = sum(1 for r in scored
                                              if not r["retrieved_any_truth"])
+    agg["routing"] = {
+        "top1_is_truth_standard": sum(1 for r in scored
+                                      if r.get("top1_is_truth_standard")),
+        "any_truth_standard_in_topk": sum(1 for r in scored
+                                          if r.get("any_truth_standard_in_topk")),
+        "all_truth_standards_in_topk": sum(1 for r in scored
+                                           if r.get("all_truth_standards_in_topk")),
+        "items_scored": len(scored),
+    }
     return {"aggregate": agg, "per_item": per_item}
 
 
@@ -309,6 +351,13 @@ def print_report(retrieval: dict, grounding: dict | None, meta: dict) -> None:
     print(f"   MRR           : {agg['mrr']}")
     print(f"   no truth in top-{MAX_K}: {agg['items_with_no_truth_in_topk']}"
           f"/{agg['items_scored']}")
+    rt = agg.get("routing")
+    if rt:
+        n = rt["items_scored"]
+        print(f"   routing: rank-1 from a truth standard {rt['top1_is_truth_standard']}"
+              f"/{n}; any truth standard in top-{MAX_K} "
+              f"{rt['any_truth_standard_in_topk']}/{n}; all truth standards "
+              f"{rt['all_truth_standards_in_topk']}/{n}")
     print(f"   annotation disagreement (Jaccard mean): {meta.get('jaccard_mean')}")
 
     if grounding:

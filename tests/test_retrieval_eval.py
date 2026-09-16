@@ -150,3 +150,64 @@ class TestClassifyVerdict:
             re_.classify_verdict(self.TRUTH, [], [], 0),
         }
         assert len(names) == 5
+
+
+class TestStandardOf:
+    def test_splits_on_the_chunk_separator(self):
+        assert re_.standard_of("road_surface_inspection.md::7") == \
+            "road_surface_inspection.md"
+
+    def test_file_without_an_index_is_returned_whole(self):
+        assert re_.standard_of("plain.md") == "plain.md"
+
+
+class TestRoutingDiagnostic:
+    """Separates 'wrong standard' from 'right standard, wrong clause'.
+
+    recall@k alone cannot tell these apart, and they need different fixes, so
+    the two cases are asserted independently here.
+    """
+
+    TRUTH = ["a.md::3", "a.md::5"]
+
+    def test_empty_truth_yields_nothing(self):
+        assert re_.routing_diagnostic(["a.md::3"], []) == {}
+
+    def test_right_standard_but_wrong_clause_still_counts_as_routed(self):
+        # The exact failure the diagnostic exists to expose: the file is
+        # reached, the clause is not, so recall is 0 while routing succeeded.
+        ranked = ["a.md::0", "a.md::1", "b.md::2"]
+        diag = re_.routing_diagnostic(ranked, self.TRUTH)
+        assert diag["any_truth_standard_in_topk"] is True
+        assert diag["top1_is_truth_standard"] is True
+        assert re_.recall_at_k(ranked, self.TRUTH, 3) == 0.0
+
+    def test_wrong_standard_at_rank_one_is_flagged(self):
+        ranked = ["b.md::0", "a.md::1"]
+        diag = re_.routing_diagnostic(ranked, self.TRUTH)
+        assert diag["top1_is_truth_standard"] is False
+        assert diag["any_truth_standard_in_topk"] is True
+
+    def test_no_truth_standard_anywhere(self):
+        ranked = ["b.md::0", "c.md::1"]
+        diag = re_.routing_diagnostic(ranked, self.TRUTH)
+        assert diag["any_truth_standard_in_topk"] is False
+        assert diag["all_truth_standards_in_topk"] is False
+
+    def test_all_truth_standards_present_is_tracked_separately(self):
+        # Truth spans two files; only one is reached.
+        truth = ["a.md::3", "b.md::1"]
+        partial = re_.routing_diagnostic(["a.md::0"], truth)
+        assert partial["any_truth_standard_in_topk"] is True
+        assert partial["all_truth_standards_in_topk"] is False
+        complete = re_.routing_diagnostic(["a.md::0", "b.md::0"], truth)
+        assert complete["all_truth_standards_in_topk"] is True
+
+    def test_empty_ranking_does_not_raise(self):
+        diag = re_.routing_diagnostic([], self.TRUTH)
+        assert diag["top1_is_truth_standard"] is False
+        assert diag["any_truth_standard_in_topk"] is False
+
+    def test_reports_the_truth_standards_found(self):
+        diag = re_.routing_diagnostic(["a.md::0"], self.TRUTH)
+        assert diag["truth_standards"] == ["a.md"]
