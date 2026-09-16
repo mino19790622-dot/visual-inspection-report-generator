@@ -4,39 +4,59 @@
 # Keeping them apart means a price change can be re-applied to every historical
 # run instead of invalidating it.
 #
-# Rates are intentionally `null` until you fill them in from the official price
-# list — see `source` below. A null rate makes `cost_for()` return
-# `known=False` and a `None` cost. It will NOT be reported as 0.0, because "no
-# price configured" and "this call was free" are different facts.
+# ── Filled 2026-09-16 from the official Alibaba Cloud (Model Studio / Bailian)
+#    price lists. These are list prices in CNY for the China (Beijing) region,
+#    pay-as-you-go, and they change over time — a published cost table is only
+#    meaningful together with `effective_date` below.
 #
-# After filling this in, bump `effective_date` and note the change in the commit
-# message: every published cost table cites this date.
+#    Sources (two independent official pages, cross-checked):
+#      * https://help.aliyun.com/en/model-studio/model-pricing                 (Model Studio pricing)
+#      * https://help.aliyun.com/en/document_detail/3023262.html               (AI PaaS billing rules)
+#      * https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api (embedding rates)
+#      * https://cn.aliyun.com/product/bailian/pricing                        (product pricing page)
+#
+#    A rate that could not be sourced is left `null` rather than estimated: a
+#    null rate makes `cost_for()` return `known=False` and a `None` cost, and it
+#    will NOT be reported as 0.0, because "no price configured" and "this call
+#    was free" are different facts.
 
-effective_date: null
+effective_date: 2026-09-16
 currency: CNY
-source: https://help.aliyun.com/zh/model-studio/models
+source: https://help.aliyun.com/en/model-studio/model-pricing
 
 models:
-  # Vision analysis (perception stage). Image input is billed separately from
-  # text tokens by the provider — always take the number from the API `usage`
-  # object rather than computing it here.
+  # Vision analysis (perception stage).
+  # Published as a flat input/output token rate — the official table has no
+  # separate line item for image tokens, so vision input is covered by the input
+  # rate. Our recorded `vlm_tokens` come from the API `usage` object, which
+  # counts image-derived tokens in `prompt_tokens`, so the two are consistent.
+  # Residual caveat: if the provider ever bills image input on a different
+  # basis, the vision column must be revisited; the token counts themselves
+  # remain measured and unaffected.
   qwen-vl-max:
-    input_per_1k: null
-    output_per_1k: null
-    note: "image tokens billed separately; use the API usage object"
+    input_per_1k: 0.0016
+    output_per_1k: 0.004
+    note: "list price, China (Beijing), pay-as-you-go; input covers vision tokens"
 
   # Grounding agent (tool-calling stage).
+  # Tiered by context length; our prompts are far below 128k, so the first tier
+  # applies. Tiers: 0-128k = 0.0008/0.002, 128k-256k = 0.0024/0.02,
+  # 256k-1m = 0.0048/0.048.
   qwen-plus:
-    input_per_1k: null
-    output_per_1k: null
+    input_per_1k: 0.0008
+    output_per_1k: 0.002
+    note: "tier 0-128k context; our prompts fall in this tier"
 
-  # Embeddings used by the RAG retriever.
+  # Embeddings used by the RAG retriever. Billed on input only — output is free
+  # (0 here means "zero, by the published rule", not "unknown").
   text-embedding-v2:
-    input_per_1k: null
+    input_per_1k: 0.0007
     output_per_1k: 0
+    note: "input-only billing; output tokens are not charged"
 
   # Judge model used by eval/ — its cost belongs to evaluation, not to a
   # report, and is tracked separately in eval runs.
   qwen-turbo:
-    input_per_1k: null
-    output_per_1k: null
+    input_per_1k: 0.0003
+    output_per_1k: 0.0006
+    note: "non-thinking mode rate; thinking-mode output is billed higher (0.003)"
