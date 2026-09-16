@@ -4,9 +4,16 @@
 Usage is measured; price is configuration. Keeping them apart means a price
 change can be re-applied to every historical run instead of invalidating it.
 
-``config/pricing.yaml`` ships with ``null`` rates on purpose: the file is the
-single place to paste the current official list, and an unfilled rate yields
-``known=False`` rather than a silently wrong number.
+``config/pricing.yaml`` is the single place a rate may live, never code: a
+price change can then be re-applied to every historical run. The four billed
+models carry real rates as of ``effective_date: 2026-09-16``; any model absent
+from the table — or any rate still null — yields ``known=False`` rather than a
+silently wrong number.
+
+A missing token count is unknown in the same way: ``None`` means "not measured",
+while ``0`` means "measured, and it was free". Only ``None`` makes a cost
+unknown, so an input-only model priced with ``output_per_1k: 0`` still costs
+what its input costs.
 """
 from __future__ import annotations
 
@@ -70,14 +77,20 @@ def cost_for(model: str | None, input_tokens: int | None,
     entry = price_for(model, path)
     result: dict[str, Any] = {"cost": None, "currency": currency,
                               "known": False, "model": model}
-    if entry is None or input_tokens is None and output_tokens is None:
+    # Parenthesised on purpose: `a or b is None and c is None` binds as
+    # `a or (b is None and c is None)`, which let a *half*-known call through —
+    # one leg None, the other measured — and then priced the missing leg as 0
+    # while still reporting known=True. Missing is None, not 0: a genuinely
+    # free leg (an input-only model) is recorded as 0 in the snapshot and must
+    # still price to zero. So only None is unknown.
+    if entry is None or input_tokens is None or output_tokens is None:
         return result
     in_rate = entry.get("input_per_1k")
     out_rate = entry.get("output_per_1k")
     if in_rate is None or out_rate is None:
         return result
-    cost = ((input_tokens or 0) / 1000.0 * float(in_rate)
-            + (output_tokens or 0) / 1000.0 * float(out_rate))
+    cost = (input_tokens / 1000.0 * float(in_rate)
+            + output_tokens / 1000.0 * float(out_rate))
     result["cost"] = round(cost, 6)
     result["known"] = True
     result["effective_date"] = pricing.get("effective_date")

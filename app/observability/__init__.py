@@ -69,6 +69,9 @@ def log_request(image_filename: str, state: dict) -> None:
             "total_tokens": usage.get("total_tokens"),
             "latency_ms": usage.get("latency_ms"),
             "cost_rmb": usage.get("cost_rmb"),
+            # Absent means "the producer did not tell us", so we do not claim
+            # known=True — an unpriced call must not read as a measured one.
+            "cost_known": bool(usage.get("cost_known")),
         },
         "retrieval": {
             "top_k": state.get("top_k"),

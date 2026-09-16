@@ -34,6 +34,7 @@ ALLOWED_KEYS = {
     "risk_level", "top_k", "route_path", "retry_count",
     "detection", "object_count", "inference_ms", "counts",
     "vlm", "prompt_tokens", "completion_tokens", "total_tokens", "cost_rmb",
+    "cost_known",
     "retrieval", "standards_count", "n_retrieved", "mode",
     "finding_count", "citation_counts", "attribution_pass_rate",
     "tool", "tool_calls_count", "n_results", "args", "query", "k",

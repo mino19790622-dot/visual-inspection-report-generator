@@ -9,6 +9,11 @@ import cv2
 from dotenv import load_dotenv
 from openai import OpenAI
 
+# Price is configuration, not code: this module reports token *counts* and asks
+# the shared snapshot for the money. Safe as a plain module-level import —
+# app.observability does not import app.vlm, so there is no cycle.
+from app.observability.pricing import cost_for  # noqa: E402
+
 load_dotenv()
 
 
@@ -72,11 +77,15 @@ Given this is a visual inspection context, note any safety risks, structural con
         """Send image + detection JSON to VLM, return structured result.
 
         Returns:
-            {"report": str, "usage": {"prompt_tokens": int,
-                                       "completion_tokens": int,
-                                       "total_tokens": int,
+            {"report": str, "usage": {"prompt_tokens": int | None,
+                                       "completion_tokens": int | None,
+                                       "total_tokens": int | None,
                                        "latency_ms": int,
-                                       "cost_rmb": float}}
+                                       "cost_rmb": float | None,
+                                       "cost_known": bool}}
+
+        Token counts and cost are ``None`` when the provider reported no usage
+        block — see :func:`_extract_usage`.
         """
         import time
         image_data = self._encode_image(image_path)
@@ -98,31 +107,47 @@ Given this is a visual inspection context, note any safety risks, structural con
             max_tokens=2000,
         )
         latency_ms = int((time.time() - t0) * 1000)
-        usage = _extract_usage(response, latency_ms)
+        usage = _extract_usage(response, latency_ms, self.MODEL)
         return {"report": response.choices[0].message.content, "usage": usage}
 
 
-# DashScope qwen-vl-max public pricing ≈ ¥0.02 per 1K tokens (input+output combined).
-# This is a rough estimate — actual cost depends on the current price list and
-# whether images are charged separately. Update _RMB_PER_1K_TOKENS if pricing changes.
-_RMB_PER_1K_TOKENS = 0.02
+def _extract_usage(response, latency_ms: int, model: str | None = None) -> dict:
+    """Pull token counts from the OpenAI-compatible response and price them.
 
+    Two facts are kept distinct, because collapsing them is how a report ends
+    up lying:
 
-def _extract_usage(response, latency_ms: int) -> dict:
-    """Pull token counts from the OpenAI-compatible response and estimate cost."""
-    prompt_tokens = 0
-    completion_tokens = 0
-    # OpenAI python client exposes usage on the response object
+    * **No usage block** -> token counts are ``None``, not ``0``. "The provider
+      did not report usage" and "this call consumed zero tokens" are different
+      statements.
+    * **Cost** comes from ``config/pricing.yaml`` via :func:`cost_for`. There is
+      deliberately **no rate in this file**: a missing rate or a missing token
+      count yields ``cost_known=False`` with ``cost_rmb=None``, never a plausible
+      number. (This module previously carried a hard-coded blended rate, which
+      disagreed with the real in/out rates and could render an unmeasured call
+      as free.)
+    """
     usage_obj = getattr(response, "usage", None)
-    if usage_obj is not None:
-        prompt_tokens = getattr(usage_obj, "prompt_tokens", 0) or 0
-        completion_tokens = getattr(usage_obj, "completion_tokens", 0) or 0
-    total = prompt_tokens + completion_tokens
-    cost_rmb = round(total / 1000 * _RMB_PER_1K_TOKENS, 6)
+    if usage_obj is None:
+        return {
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "latency_ms": latency_ms,
+            "cost_rmb": None,
+            "cost_known": False,
+        }
+    prompt_tokens = getattr(usage_obj, "prompt_tokens", None)
+    completion_tokens = getattr(usage_obj, "completion_tokens", None)
+    total = None
+    if prompt_tokens is not None or completion_tokens is not None:
+        total = (prompt_tokens or 0) + (completion_tokens or 0)
+    cost = cost_for(model, prompt_tokens, completion_tokens)
     return {
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
         "total_tokens": total,
         "latency_ms": latency_ms,
-        "cost_rmb": cost_rmb,
+        "cost_rmb": cost["cost"],
+        "cost_known": cost["known"],
     }

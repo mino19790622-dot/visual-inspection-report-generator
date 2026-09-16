@@ -16,6 +16,7 @@ def _fake_state() -> dict:
             "total_tokens": 1550,
             "latency_ms": 1800,
             "cost_rmb": 0.031,
+            "cost_known": True,
         },
         "risk_level": "high",
         "top_k": 5,
@@ -39,6 +40,7 @@ def test_log_request_writes_jsonl(tmp_path, monkeypatch):
     assert rec["detection"]["object_count"] == 5
     assert rec["vlm"]["total_tokens"] == 1550
     assert rec["vlm"]["cost_rmb"] == 0.031
+    assert rec["vlm"]["cost_known"] is True
     assert rec["retrieval"]["standards_count"] == 5
     assert rec["total_latency_ms"] == 2400
     assert rec["saved"] == ["report", "annotated"]

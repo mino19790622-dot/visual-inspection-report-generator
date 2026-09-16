@@ -122,6 +122,36 @@ class TestPricing:
     def test_missing_usage_is_unknown(self):
         assert cost_for("qwen-plus", None, None)["known"] is False
 
+    def test_half_known_usage_is_unknown(self):
+        """One leg missing must not be priced as zero.
+
+        `entry is None or a is None and b is None` binds as
+        `entry is None or (a is None and b is None)`, so a call that reported
+        only completion_tokens slipped past the guard, charged the input leg as
+        0 and still came back known=True — an under-report wearing the badge of
+        a measurement.
+        """
+        for in_tok, out_tok in ((None, 500), (1000, None)):
+            result = cost_for("qwen-plus", in_tok, out_tok)
+            assert result["known"] is False, f"{in_tok}/{out_tok} must be unknown"
+            assert result["cost"] is None
+
+    def test_a_zero_leg_is_free_not_unknown(self, tmp_path, monkeypatch):
+        """Missing is None; a genuinely free leg is 0 and must still price.
+
+        An input-only model (text-embedding-v2) records output_per_1k: 0.
+        Collapsing 0 into "unknown" would be its own wrong number.
+        """
+        pricing = tmp_path / "p.yaml"
+        pricing.write_text(
+            "effective_date: '2026-09-16'\ncurrency: CNY\n"
+            "models:\n  text-embedding-v2:\n    input_per_1k: 0.0007\n"
+            "    output_per_1k: 0\n", encoding="utf-8")
+        monkeypatch.setenv("PRICING_PATH", str(pricing))
+        result = cost_for("text-embedding-v2", 1000, 0)
+        assert result["known"] is True
+        assert result["cost"] == 0.0007
+
     def test_known_rate_is_applied(self, tmp_path, monkeypatch):
         pricing = tmp_path / "p.yaml"
         pricing.write_text(

@@ -45,7 +45,7 @@ Image → YOLOv8 Detection → Qwen-VL Analysis → RAG Standards Match → Insp
 
 ## Testing
 
-217 unit/integration tests (coverage measured at 91%; the CI gate is set to 80%), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
+223 unit/integration tests (coverage measured at 92%; the CI gate is set to 80%), zero network access required — the ONNX session, DashScope embeddings, and Qwen-VL calls are all mocked at the module boundary:
 
 - `test_detection.py` — letterbox preprocessing, bbox decoding roundtrip, confidence filtering, NMS suppression/clipping
 - `test_agent.py` — risk classification (explicit statement vs keyword fallback, negation safety), routing logic, and a **full LangGraph run** verifying adaptive re-detection and tool-calling grounded findings (`mode=off` reproduces v1.0)
@@ -349,12 +349,12 @@ Every `/inspect` call appends one JSON line to `logs/inspect.jsonl` (path overri
 {"ts":"2026-09-15T...","image":"abc.jpg","risk_level":"high",
  "detection":{"object_count":3,"inference_ms":47},
  "vlm":{"prompt_tokens":1200,"completion_tokens":350,"total_tokens":1550,
-        "latency_ms":1800,"cost_rmb":null},
+        "latency_ms":1800,"cost_rmb":0.00332,"cost_known":true},
  "retrieval":{"top_k":2,"standards_count":2},
  "total_latency_ms":2400,"saved":["report","annotated"]}
 ```
 
-A per-stage trace (spans + tokens) is written to `logs/inspect_spans.jsonl`. `top_k` is now the depth the grounding agent chose for this request (not a risk-level lookup). Cost is **derived** from `config/pricing.yaml` (a versioned price snapshot, real rates as of 2026-09-16), not hard-coded in code. A stage whose model has no rate reports `known=False` with `cost: null` and is **never rendered as 0.0** — see `app/observability/pricing.py`.
+A per-stage trace (spans + tokens) is written to `logs/inspect_spans.jsonl`. `top_k` is now the depth the grounding agent chose for this request (not a risk-level lookup). Cost is **derived** from `config/pricing.yaml` (a versioned price snapshot, real rates as of 2026-09-16) on **both** log lines — there is no rate anywhere in the code. Every cost carries a `known` flag: an unpriced model, or a call whose usage the provider never reported, yields `cost: null` / `cost_known: false` and is **never rendered as 0.0**. Missing is `None`, not `0` — a genuinely free leg (an input-only model) is recorded as `0` and still prices to zero. See `app/observability/pricing.py`.
 
 ## Quick Start
 ```bash
@@ -445,7 +445,7 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 - **VLM**: Qwen-VL-Max (Alibaba DashScope, OpenAI-compatible API)
 - **RAG**: ChromaDB 1.5 + DashScope text-embedding-v2
 - **Deployment**: Docker (python:3.12-slim, runtime-only deps) + docker-compose; deployed live on AWS ECS Fargate + ECR (CI/CD via GitHub Actions OIDC)
-- **Quality**: pytest 217 tests (91% measured coverage; CI gate at 80%) + LLM-as-judge golden-set eval (10 images, manually triggered; its score is compared against a **reference** value, not an acceptance gate) + JSONL cost/latency observability on every `/inspect`
+- **Quality**: pytest 223 tests (92% measured coverage; CI gate at 80%) + LLM-as-judge golden-set eval (10 images, manually triggered; its score is compared against a **reference** value, not an acceptance gate) + JSONL cost/latency observability on every `/inspect`
 
 ## Project Structure
 
@@ -465,14 +465,14 @@ Each run exports to `reports/`: `{image}_{timestamp}.md` (human-readable report)
 │       ├── redaction.py           #   field allow-list; no API key / base64 / image lands in logs
 │       └── pricing.py             #   cost_for(); a null rate yields known=False, never 0.0
 ├── config/
-│   └── pricing.yaml               # v2: versioned price snapshot (rates unset on purpose)
+│   └── pricing.yaml               # v2: versioned price snapshot (real rates, effective_date 2026-09-16)
 ├── eval/                          # Golden-set + LLM-as-judge + ablation
 │   ├── golden_set/golden_set.json
 │   ├── judge.py                   # qwen-turbo judge, 4 dimensions
 │   ├── run_eval.py                # eval runner (deterministic + judge, --grounding-mode)
 │   ├── ablation_topk.py           # v2: 3-arm ablation (off / fixed / agentic)
 │   └── README.md
-├── tests/                         # pytest suite (217 tests, 91% coverage, no network)
+├── tests/                         # pytest suite (223 tests, 92% coverage, no network)
 │   ├── fakes.py                   # v2: ScriptedClient — fake LLM for grounding tests
 │   ├── test_citations.py          # v2
 │   ├── test_tools.py              # v2
