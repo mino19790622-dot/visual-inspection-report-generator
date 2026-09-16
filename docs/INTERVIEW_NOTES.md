@@ -31,3 +31,15 @@ must not claim. Do not inflate these; the boundary is part of the material.
   threshold; it is not a large-scale production evaluation. The judge shares the measured
   model's family — a self-enhancement-bias risk that is flagged and validated later
   (phase B), not resolved here.
+
+### 3. Usage is measured, price is configuration — and "no price" ≠ "free"
+
+> "I kept token usage and price as separate concerns: usage is measured from the API
+> response, price is a versioned snapshot file. When a rate is missing, the cost function
+> returns `known=False` instead of `0.0`, because 'no price configured' and 'this call was
+> free' are two different facts — a report that silently shows a free call is worse than one
+> that says 'unknown'."
+
+- **Boundary (do NOT claim):** the rate table is still `null`, so **no real monetary cost has
+  been produced yet** — the CNY cost column is pending (phase A). What exists today is the
+  token accounting and the refusal to fabricate a number, not a cost result.
