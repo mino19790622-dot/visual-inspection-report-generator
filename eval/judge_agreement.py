@@ -103,6 +103,13 @@ def _pearson(x: list[float], y: list[float]) -> float | None:
 
 
 def spearman(a: list[float], b: list[float]) -> float | None:
+    """Spearman rho, computed as Pearson on average ranks.
+
+    Returns ``None`` when rho is *undefined* rather than zero: fewer than two
+    paired samples, or one side is constant so there is no variance to
+    correlate. Callers must read ``None`` as "not computable", never as
+    "no agreement" -- those are opposite conclusions.
+    """
     return _pearson(_rank(a), _rank(b))
 
 
