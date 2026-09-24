@@ -17,3 +17,8 @@
 - **Change**: eval/judge_agreement.py: add a docstring to the public spearman() helper stating that it returns None when rho is undefined (fewer than two paired samples, or a constant side) rather than 0, and that callers must not read None as 'no agreement'
 - **Verification**: pytest tests: 240 passed; ruff: all checks passed
 
+## 2026-09-24 — Document the top-vs-nested allow-list switch in _clean()
+
+- **Change**: Added a docstring to app/observability/redaction.py::_clean explaining that the top flag selects ALLOWED_TOP_LEVEL for the root dict and ALLOWED_KEYS for every nested dict, and that the two sets differ. Docstring only; no code path changed.
+- **Verification**: pytest tests -q -> 240 passed; ruff check -> All checks passed
+

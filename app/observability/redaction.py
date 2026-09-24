@@ -88,6 +88,15 @@ def redact(record: dict[str, Any], _secrets: set[str] | None = None) -> dict[str
 
 
 def _clean(node: Any, secrets: set[str], top: bool = False) -> Any:
+    """Recursively copy ``node``, keeping only allow-listed keys and values.
+
+    ``top`` chooses the allow-list: the outermost dict is filtered against
+    ``ALLOWED_TOP_LEVEL``, every nested dict against ``ALLOWED_KEYS``. The two
+    sets are not the same (``meta``, ``totals``, ``saved`` ... exist only at the
+    top level), so this flag is what stops a nested dict from smuggling in a
+    key that is legal only at the root. Lists are walked element-wise; scalars
+    that are not strings pass through unchanged.
+    """
     if isinstance(node, dict):
         allowed = ALLOWED_TOP_LEVEL if top else ALLOWED_KEYS
         out: dict[str, Any] = {}
