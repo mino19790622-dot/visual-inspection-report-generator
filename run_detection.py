@@ -1,6 +1,7 @@
 
 # run_detection.py
 import json
+
 from app.detection.detector import YOLODetector
 
 det = YOLODetector("yolov8s.onnx")

@@ -22,3 +22,8 @@
 - **Change**: Added a docstring to app/observability/redaction.py::_clean explaining that the top flag selects ALLOWED_TOP_LEVEL for the root dict and ALLOWED_KEYS for every nested dict, and that the two sets differ. Docstring only; no code path changed.
 - **Verification**: pytest tests -q -> 240 passed; ruff check -> All checks passed
 
+## 2026-09-25 — Sort the import block in run_detection.py
+
+- **Change**: Added the blank line ruff's isort rule (I001) requires between the stdlib import (json) and the first-party import (app.detection.detector). Whitespace only, no runtime change; clears the file's single outstanding lint error.
+- **Verification**: pytest tests: 240 passed; ruff check run_detection.py: All checks passed
+
