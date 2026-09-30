@@ -91,6 +91,7 @@ class RequestTrace:
                               or usage.get("output_tokens"))
 
     def by_name(self, name: str) -> Span | None:
+        """Return the first span called ``name``, or None if it never opened."""
         for s in self.spans:
             if s.name == name:
                 return s
@@ -100,6 +101,11 @@ class RequestTrace:
         return (time.perf_counter() - self._t0) * 1000
 
     def totals(self) -> dict[str, Any]:
+        """Aggregate all spans; a zero token sum collapses to None.
+
+        None keeps its module-level meaning — "nothing was reported" — so a
+        request that recorded no usage must not be read as a measured zero.
+        """
         inp = sum(s.input_tokens or 0 for s in self.spans)
         out = sum(s.output_tokens or 0 for s in self.spans)
         return {

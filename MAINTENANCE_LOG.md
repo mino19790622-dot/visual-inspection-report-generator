@@ -27,3 +27,8 @@
 - **Change**: Added the blank line ruff's isort rule (I001) requires between the stdlib import (json) and the first-party import (app.detection.detector). Whitespace only, no runtime change; clears the file's single outstanding lint error.
 - **Verification**: pytest tests: 240 passed; ruff check run_detection.py: All checks passed
 
+## 2026-09-30 — docs(spans): 补 by_name/totals 的契约说明
+
+- **Change**: app/observability/spans.py: 给 RequestTrace.by_name() 与 totals() 补 docstring；写明 by_name 返回首个匹配 span 或 None，以及 totals() 在 token 合计为 0 时把字段收敛成 None —— 与模块 docstring 第 1 条 '未上报即 None' 一致，避免被读成实测的 0。
+- **Verification**: pytest 240 passed; ruff All checks passed
+
