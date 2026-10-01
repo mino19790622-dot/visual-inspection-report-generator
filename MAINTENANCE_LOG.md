@@ -32,3 +32,8 @@
 - **Change**: app/observability/spans.py: 给 RequestTrace.by_name() 与 totals() 补 docstring；写明 by_name 返回首个匹配 span 或 None，以及 totals() 在 token 合计为 0 时把字段收敛成 None —— 与模块 docstring 第 1 条 '未上报即 None' 一致，避免被读成实测的 0。
 - **Verification**: pytest 240 passed; ruff All checks passed
 
+## 2026-10-01 — docs(eval): rank_of_first_relevant 的 1-based 与 None 契约
+
+- **Change**: eval/retrieval_eval.py: 给 rank_of_first_relevant() 补 docstring。写明三点：(1) 返回的 rank 是 1-based，因为 evaluate_retrieval 的 MRR 聚合直接除以它（改 0-based 会整体位移）；(2) None 不是 rank，而是「未检索到相关块」，调用方必须当 miss（RR=0.0）处理；(3) truth 为空时同样返回 None 而非 1，未标注条目不会被算成 rank 1 命中。仅文档，无行为变更。
+- **Verification**: pytest 240 passed；ruff All checks passed（eval/retrieval_eval.py）
+

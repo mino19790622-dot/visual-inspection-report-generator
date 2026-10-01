@@ -146,6 +146,18 @@ def recall_at_k(ranked: list[str], truth: list[str], k: int) -> float:
 
 
 def rank_of_first_relevant(ranked: list[str], truth: list[str]) -> int | None:
+    """1-based rank of the first relevant chunk in ``ranked``, else ``None``.
+
+    The rank is 1-based on purpose: the reciprocal rank is then exactly
+    ``1 / result``, which is what the MRR aggregate in
+    :func:`evaluate_retrieval` divides by. Returning a 0-based index would
+    silently shift every reciprocal rank.
+
+    ``None`` is not a rank — it means "no relevant chunk was retrieved", and
+    callers must read it as a miss (reciprocal rank 0.0). An empty ``truth``
+    also yields ``None`` rather than 1, so an item that was never annotated
+    cannot be scored as if it had been found at rank 1.
+    """
     truth_set = set(truth)
     for i, cid in enumerate(ranked, start=1):
         if cid in truth_set:
