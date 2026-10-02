@@ -37,3 +37,8 @@
 - **Change**: eval/retrieval_eval.py: 给 rank_of_first_relevant() 补 docstring。写明三点：(1) 返回的 rank 是 1-based，因为 evaluate_retrieval 的 MRR 聚合直接除以它（改 0-based 会整体位移）；(2) None 不是 rank，而是「未检索到相关块」，调用方必须当 miss（RR=0.0）处理；(3) truth 为空时同样返回 None 而非 1，未标注条目不会被算成 rank 1 命中。仅文档，无行为变更。
 - **Verification**: pytest 240 passed；ruff All checks passed（eval/retrieval_eval.py）
 
+## 2026-10-02 — docs(grounding): document the max_k_requested contract
+
+- **Change**: app/grounding.py: 给 GroundedReport.max_k_requested 补 docstring，写明 ① 它是本次运行里 retrieve_standards 被请求的最大 k（= 模型决定看多少条条款），被 graph.py 导出为 top_k span 字段、被 ablation_topk.py 记为 k_max 列；② 返回 0 表示 agent 从未调用检索工具（= 没检索），不是请求了 0 条；③ fixed 模式那一次合成预检索以 k=MAX_K(=5) 记入 tool_calls，所以对照组报告满深度。仅文档，无行为变更。
+- **Verification**: pytest 240 passed；ruff All checks passed (app/grounding.py)
+

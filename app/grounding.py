@@ -84,6 +84,20 @@ class GroundedReport(BaseModel):
 
     @property
     def max_k_requested(self) -> int:
+        """Deepest ``k`` the agent asked of ``retrieve_standards`` this run.
+
+        Read as "how many clauses did the model choose to look at", so it is
+        exported as the ``top_k`` span field (``app/agent/graph.py``) and as
+        the ``k_max`` column of the dynamic-vs-fixed ablation
+        (``eval/ablation_topk.py``).
+
+        Two edge cases are deliberate, not missing data:
+
+        * ``0`` means the agent never called the tool — no retrieval, not a
+          request for zero clauses.
+        * In ``fixed`` mode the single synthetic pre-retrieval call is logged
+          with ``k=MAX_K``, so the control arm reports the full depth.
+        """
         ks = [c.get("args", {}).get("k", 0)
               for c in self.tool_calls if c.get("tool") == "retrieve_standards"]
         return max(ks) if ks else 0
