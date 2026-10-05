@@ -157,6 +157,13 @@ class ToolRegistry:
 
     @property
     def budget_exhausted(self) -> bool:
+        """True once *retrieval* calls reach ``max_calls``.
+
+        Checked before argument validation, so once exhausted even a
+        well-formed ``retrieve_standards`` call is refused;
+        ``submit_findings`` bypasses the check entirely, so a model that
+        burned its budget can still finish the run.
+        """
         return self.calls_used >= self.max_calls
 
     # -- validation ---------------------------------------------------- #
@@ -233,6 +240,7 @@ class ToolRegistry:
         self.calls.append({"tool": name, "args": args, "n_results": 0})
 
     def call_log(self) -> list[dict[str, Any]]:
+        """A copy of the call log, in call order, for replay and export."""
         return list(self.calls)
 
 

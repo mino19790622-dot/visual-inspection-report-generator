@@ -42,3 +42,8 @@
 - **Change**: app/grounding.py: 给 GroundedReport.max_k_requested 补 docstring，写明 ① 它是本次运行里 retrieve_standards 被请求的最大 k（= 模型决定看多少条条款），被 graph.py 导出为 top_k span 字段、被 ablation_topk.py 记为 k_max 列；② 返回 0 表示 agent 从未调用检索工具（= 没检索），不是请求了 0 条；③ fixed 模式那一次合成预检索以 k=MAX_K(=5) 记入 tool_calls，所以对照组报告满深度。仅文档，无行为变更。
 - **Verification**: pytest 240 passed；ruff All checks passed (app/grounding.py)
 
+## 2026-10-05 — docs(tools): budget_exhausted 与 call_log 契约
+
+- **Change**: app/tools.py: 给 ToolRegistry.budget_exhausted 补 docstring，写明预算只计 retrieval 调用、检查发生在参数校验之前（故耗尽后连合法调用也拒），而 submit_findings 完全绕过该检查；给 call_log() 补 docstring，说明返回的是调用顺序的副本。仅文档，无行为变更。
+- **Verification**: pytest 240 passed; ruff All checks passed (app/tools.py)
+
