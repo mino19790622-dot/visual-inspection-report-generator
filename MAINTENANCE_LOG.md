@@ -47,3 +47,8 @@
 - **Change**: app/tools.py: 给 ToolRegistry.budget_exhausted 补 docstring，写明预算只计 retrieval 调用、检查发生在参数校验之前（故耗尽后连合法调用也拒），而 submit_findings 完全绕过该检查；给 call_log() 补 docstring，说明返回的是调用顺序的副本。仅文档，无行为变更。
 - **Verification**: pytest 240 passed; ruff All checks passed (app/tools.py)
 
+## 2026-10-06 — letterbox return contract
+
+- **Change**: app/detection/detector.py: 给 YOLODetector._letterbox 补 docstring，写明返回三元组 (canvas, scale, (pad_left, pad_top)) 的契约：scale 作用于最长边故可直接相除；pad 顺序是 (left, top) 即先 x 后 y，_postprocess 按 pad[0]->x / pad[1]->y 消费，写反会让非方形输入的框整体偏移；canvas 填充 114 且用整除居中，奇数余数偏向 bottom/right。仅文档，无行为变更。
+- **Verification**: pytest 240 passed; ruff All checks passed (app/detection/detector.py)
+

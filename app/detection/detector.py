@@ -24,6 +24,20 @@ class YOLODetector:
 
     # ---------- 预处理：letterbox ----------
     def _letterbox(self, img: np.ndarray):
+        """Resize `img` onto a square canvas, preserving aspect ratio.
+
+        Returns `(canvas, scale, (pad_left, pad_top))`, all three of which
+        `_postprocess` needs to map boxes back to the original frame:
+
+        * `scale` is a single factor applied to the *longest* side
+          (`input_size / max(h, w)`), so it is safe to divide by it.
+        * `pad` is ordered **(left, top)** — i.e. x before y — and is consumed
+          that way in `_postprocess` (`pad[0]` on x, `pad[1]` on y). Swapping
+          the two silently shifts every box on non-square inputs.
+        * the canvas is filled with 114, the grey YOLO expects, and the image
+          is centred by integer division, so an odd remainder biases the extra
+          pixel to the bottom/right.
+        """
         h, w = img.shape[:2]
         scale = self.input_size / max(h, w)
         nh, nw = int(h * scale), int(w * scale)
