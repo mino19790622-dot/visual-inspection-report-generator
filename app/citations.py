@@ -51,6 +51,12 @@ def fuzzy_contains(haystack: str, needle: str,
     Sliding-window because a citation quote is a *substring* of a chunk: a
     whole-string comparison would score a short correct quote as a poor match
     against a long chunk.
+
+    ``threshold`` is accepted only so the signature mirrors ``check_citation``
+    and callers can forward it positionally; this function never reads it. The
+    raw best score is always returned, so a large ``threshold`` does not prune,
+    short-circuit or otherwise change the result -- the ``score < threshold``
+    decision is made by the caller, not here.
     """
     h, n = _normalise(haystack), _normalise(needle)
     if not n:

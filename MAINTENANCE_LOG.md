@@ -52,3 +52,8 @@
 - **Change**: app/detection/detector.py: 给 YOLODetector._letterbox 补 docstring，写明返回三元组 (canvas, scale, (pad_left, pad_top)) 的契约：scale 作用于最长边故可直接相除；pad 顺序是 (left, top) 即先 x 后 y，_postprocess 按 pad[0]->x / pad[1]->y 消费，写反会让非方形输入的框整体偏移；canvas 填充 114 且用整除居中，奇数余数偏向 bottom/right。仅文档，无行为变更。
 - **Verification**: pytest 240 passed; ruff All checks passed (app/detection/detector.py)
 
+## 2026-10-07 — Document that fuzzy_contains ignores its threshold argument
+
+- **Change**: Added a docstring paragraph to app/citations.py::fuzzy_contains noting that the threshold parameter is never read in the body: the raw best similarity is always returned, and the score < threshold decision lives in check_citation. Signature-only parameter, kept for positional forwarding.
+- **Verification**: pytest tests: 240 passed (files=17, unchanged); ruff check app/citations.py: All checks passed
+
