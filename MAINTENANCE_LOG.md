@@ -57,3 +57,8 @@
 - **Change**: Added a docstring paragraph to app/citations.py::fuzzy_contains noting that the threshold parameter is never read in the body: the raw best similarity is always returned, and the score < threshold decision lives in check_citation. Signature-only parameter, kept for positional forwarding.
 - **Verification**: pytest tests: 240 passed (files=17, unchanged); ruff check app/citations.py: All checks passed
 
+## 2026-10-08 — RAG indexing contract
+
+- **Change**: app/rag/retriever.py: docstring for StandardsRetriever._index_standards. Records that it is idempotent off collection.count()>0, so editing data/standards/*.md has no effect until .chroma_db is deleted; only *.md is read; empty dir raises ValueError; and it runs from __init__ so construction hits DashScope when the store is empty. Doc-only, +23/-1, no behaviour change.
+- **Verification**: pytest 240 passed; ruff All checks passed on app/rag/retriever.py
+

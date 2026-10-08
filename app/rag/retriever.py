@@ -74,7 +74,29 @@ class StandardsRetriever:
 
     # ---------- Indexing ----------
     def _index_standards(self, standards_dir: str):
-        """Load markdown standards, chunk, embed, and store in ChromaDB."""
+        """Load markdown standards, chunk, embed, and store in ChromaDB.
+
+        Contract:
+
+        1. **Idempotent, and it does not re-read the directory.** The early
+           return below keys off ``collection.count() > 0`` alone, so once the
+           store is populated a second call is a no-op *even if the files under
+           ``standards_dir`` changed*. Editing or adding a standard therefore
+           has no effect until ``.chroma_db`` is deleted; there is no
+           invalidation hook, because chunk ids are
+           ``"<source>::<chunk_index>"`` and must stay stable for citations
+           (``app.citations``) to keep resolving.
+        2. **Only ``*.md`` is read.** Any other extension is skipped, so a
+           ``.txt`` standard is silently ignored rather than erroring.
+        3. **Raises ``ValueError`` when nothing was collected.** An empty or
+           all-non-markdown directory fails loudly; an empty store is never
+           written.
+        4. **Called from ``__init__``, so construction is not free.** When the
+           store is empty the constructor reaches DashScope over the network
+           via ``_embed_batch``; tests bypass this by building the instance
+           with ``__new__`` and injecting a fake collection (see
+           ``tests/test_rag.py``).
+        """
         if self.collection.count() > 0:
             return  # already indexed
 
