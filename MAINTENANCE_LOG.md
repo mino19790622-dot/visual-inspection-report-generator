@@ -62,3 +62,8 @@
 - **Change**: app/rag/retriever.py: docstring for StandardsRetriever._index_standards. Records that it is idempotent off collection.count()>0, so editing data/standards/*.md has no effect until .chroma_db is deleted; only *.md is read; empty dir raises ValueError; and it runs from __init__ so construction hits DashScope when the store is empty. Doc-only, +23/-1, no behaviour change.
 - **Verification**: pytest 240 passed; ruff All checks passed on app/rag/retriever.py
 
+## 2026-10-09 — docs(pricing): document _load_raw/_load_cached contracts
+
+- **Change**: Add docstrings to app/observability/pricing.py::_load_raw and ::_load_cached. _load_raw: the three 'no table here' cases (file absent / optional yaml missing / YAML parses to None) all collapse to {}, so an empty mapping is reported as unpriced (known=False), never as free. _load_cached: lru_cache(maxsize=8) is keyed on the already-resolved path, so load_pricing must apply the PRICING_PATH env override first; the cached mapping is one shared object, so callers must treat it as read-only and tests that rewrite the snapshot should call cache_clear(). Docs only, +20 lines, no behaviour change.
+- **Verification**: pytest 240 passed; ruff All checks passed (changed file only)
+

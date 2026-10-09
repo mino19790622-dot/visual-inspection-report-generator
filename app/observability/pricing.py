@@ -26,6 +26,15 @@ DEFAULT_PRICING_PATH = "config/pricing.yaml"
 
 
 def _load_raw(path: str) -> dict[str, Any]:
+    """Read the snapshot from disk, degrading to ``{}`` instead of raising.
+
+    Three distinct "no table here" cases all collapse to an empty mapping, so
+    the caller only ever has to reason about one shape: the file is absent, the
+    optional ``yaml`` dependency is missing, or the file parses to ``None``
+    (empty/comment-only YAML — hence the trailing ``or {}``). An empty mapping
+    means every model prices as ``known=False``, which is the intended outcome:
+    no snapshot is reported as "unpriced", never as "free".
+    """
     p = Path(path)
     if not p.exists():
         return {}
@@ -39,6 +48,17 @@ def _load_raw(path: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=8)
 def _load_cached(path: str) -> dict[str, Any]:
+    """Memoise :func:`_load_raw` on the *already-resolved* path.
+
+    Two contracts matter to callers. First, the key is the final path, so the
+    ``PRICING_PATH`` override must be applied by the caller (see
+    :func:`load_pricing`) before it reaches here — passing the raw argument in
+    would cache under the default and silently ignore the override. Second, the
+    cached mapping is a single shared object handed to every caller; treat it as
+    read-only, since mutating it in place would leak into every later lookup for
+    the life of the process. Tests that rewrite the snapshot should call
+    ``_load_cached.cache_clear()``.
+    """
     return _load_raw(path)
 
 
