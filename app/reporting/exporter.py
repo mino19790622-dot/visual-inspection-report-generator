@@ -15,7 +15,25 @@ class ReportExporter:
     def export(self, image_path: str, det_result: dict, vlm_report: str,
                standards: list, draw_fn=None, decisions: list = None,
                grounded=None) -> dict:
-        """Export a full report. draw_fn(image_path, det_result, out_path) draws bboxes."""
+        """Export a full report. draw_fn(image_path, det_result, out_path) draws bboxes.
+
+        Returns a path map whose key set is NOT fixed: ``"markdown"`` and
+        ``"json"`` are always present, ``"annotated_image"`` only if ``draw_fn``
+        was given and it returned without raising. On failure the key is
+        popped, not set to ``None`` or ``""`` -- so callers must test
+        ``"annotated_image" in saved`` rather than read the value
+        (``test_annotation_failure_does_not_kill_report``). Note that popping
+        only withdraws the claim: a draw_fn that writes part of the file and
+        then raises leaves that partial ``_det.jpg`` on disk, so anything that
+        later globs ``*_det.jpg`` can pick up a truncated image.
+
+        ``base`` is built from a single ``datetime.now()`` shared by all three
+        artifact paths, but ``generated_at`` in the JSON and ``Generated`` in the
+        Markdown each read the clock again, so those two can differ from the
+        filename stamp by a second. ``relevance`` is the same ``1 - distance``
+        in both outputs, rendered at different precision: rounded to 3 dp in the
+        JSON, ``:.2f`` in the Markdown.
+        """
         decisions = decisions or []
         os.makedirs(self.out_dir, exist_ok=True)
         stem = os.path.splitext(os.path.basename(image_path))[0]
