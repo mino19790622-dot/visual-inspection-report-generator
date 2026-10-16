@@ -32,6 +32,28 @@ agent = InspectionAgent()
 
 
 def _save_upload(image: UploadFile) -> str:
+    """Validate the upload by extension and persist it under ``UPLOAD_DIR``.
+
+    Contract:
+
+    1. **Validation is filename-only.** ``ext`` is derived from the
+       client-supplied ``image.filename`` and nothing else — the bytes are never
+       sniffed and the declared content type is ignored. A JPEG mislabelled as
+       ``.png`` is therefore accepted, while a genuine image whose name carries
+       no extension or an unknown one is rejected with **415** before any file
+       is created. ``filename=None`` yields ``""`` and is rejected the same way.
+    2. **The client filename never reaches the filesystem.** The stored name is
+       a fresh ``uuid4().hex[:12]`` plus the lowercased extension, so a path
+       traversal smuggled in ``filename`` is inert and two concurrent uploads
+       cannot collide.
+    3. **The body is read whole, with no application-level size cap.**
+       ``image.file.read()`` is unbounded here; Starlette only spools large
+       bodies to disk, it does not reject them.
+    4. **Returns the path handed to the agent** — and on to
+       :func:`app.observability.log_request`, which records only its
+       ``basename``. The original ``image.filename`` is echoed back in the
+       response but never written to disk or to the log.
+    """
     ext = os.path.splitext(image.filename or "")[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
