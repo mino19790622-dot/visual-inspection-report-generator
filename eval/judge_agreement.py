@@ -115,7 +115,24 @@ def spearman(a: list[float], b: list[float]) -> float | None:
 
 def agreement(judge: dict[str, dict[str, int]],
               hand: dict[str, dict[str, int]]) -> dict[str, Any]:
-    """Pairwise agreement over dimensions, plus per-dimension breakdown."""
+    """Pairwise agreement over dimensions, plus per-dimension breakdown.
+
+    Pairs are formed on the **intersection** of the two raters, so neither
+    headline denominator means "how many images exist":
+
+    * ``n_images_compared`` counts ids present in *both* dicts. An image the
+      independent rater scored but the judge skipped (``judge_raw.skipped``,
+      or one dimension not an ``int`` -- see :func:`load_judge_scores`) is
+      dropped silently and never surfaces as a disagreement. That is the
+      intended direction: an unscored cell is missing data, not evidence of
+      a lenient judge.
+    * ``n_pairs`` counts (image, dimension) cells present on both sides. It
+      is *not* always ``4 * n_images_compared``, because a rater may leave
+      one dimension of one image blank; the per-dimension ``n`` values are
+      the authoritative counts and are what each rate divides by.
+    * Every rate is ``None`` when its denominator is 0, never ``0.0`` --
+      "no comparable cells" and "0 % agreement" are opposite readings.
+    """
     per_dim: dict[str, Any] = {}
     pairs: list[tuple[int, int]] = []
 
@@ -186,6 +203,21 @@ def gate_impact(judge: dict[str, dict[str, int]],
     det_score == 1.0 (which the ablation shows for every image) the judge term
     must reach ``(threshold - 2.0) / 0.6`` for the image to clear the
     threshold; that is the judge average the threshold actually demands.
+
+    The two averages are normalised differently, which only matters if you
+    call this with partial score dicts instead of the ones the loaders
+    return:
+
+    * the judge average divides by ``len(DIMENSIONS)`` unconditionally, so a
+      judge entry holding fewer than four dimensions is silently *penalised*
+      (one 5 -> 1.25, not 5.0);
+    * the rater average divides by the number of dimensions actually present
+      in that image, so a partial entry is not penalised.
+
+    Both loaders hand over complete 4-dimension entries, so in the CLI path
+    the two agree. Raises :class:`ZeroDivisionError` if an image in ``hand``
+    carries none of :data:`DIMENSIONS` -- an image with only unrelated keys
+    makes the rater denominator 0.
     """
     needed = round((threshold - 2.0) / 0.6, 3)
     flips = []
