@@ -82,3 +82,8 @@
 - **Change**: eval/judge_agreement.py: document that agreement() pairs on the intersection of both raters (n_images_compared ignores images only in hand; n_pairs != 4*n_images_compared when a dimension is blank; rates are None not 0.0 on empty denominators), and that gate_impact() normalises the judge average by 4 unconditionally while the rater average divides by dimensions present, raising ZeroDivisionError when a hand entry has none of DIMENSIONS. All three behaviours verified by probe before writing.
 - **Verification**: pytest 240 passed; ruff All checks passed
 
+## 2026-10-20 — vlm client: 密钥回落与检测器描述硬编码
+
+- **Change**: 为 VLMClient.__init__ 与 _build_prompt 补 docstring（+32/-0，纯文档）。__init__: api_key 显式取自 DASHSCOPE_API_KEY，而 OpenAI SDK 把 None 当作回落到 OPENAI_API_KEY ⇒ 只有 OPENAI_API_KEY 的机器构造会静默成功、把该 key 发往 dashscope 域名，直到首次 analyze 才报错；两者都缺则构造期即抛 OpenAIError。另 load_dotenv() 在模块导入时执行。_build_prompt: 检测器被写成硬编码字面量 YOLOv8m/COCO 80 类，而 onnx_path 与 classes_path 均为运行时参数、run_pipeline.py 还暴露 --onnx ⇒ 换权重或换类别表后 prompt 仍宣称 COCO-80，不报错但第 3 节按错误类空间归因、第 2 节被要求照抄检测计数。
+- **Verification**: pytest 240 passed（72x3+24 进度点自洽）；ruff All checks passed（files: app/vlm/client.py）
+

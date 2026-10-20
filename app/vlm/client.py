@@ -24,6 +24,22 @@ class VLMClient:
     MODEL = "qwen-vl-max"
 
     def __init__(self):
+        """Build the DashScope-backed OpenAI client.
+
+        The key is passed **explicitly** as ``api_key=os.getenv(...)``, and
+        that detail is load-bearing: the OpenAI SDK treats ``api_key=None`` as
+        "fall back to ``OPENAI_API_KEY``". So on a machine that has a real
+        ``OPENAI_API_KEY`` but no DashScope key, construction *succeeds* and
+        the OpenAI key is then sent to ``dashscope.aliyuncs.com`` — nothing
+        complains until the first :meth:`analyze` call. With neither variable
+        set the SDK raises ``OpenAIError: Missing credentials`` right here,
+        i.e. at construction (which, through ``graph._get_vlm``, is the first
+        graph build rather than the first request).
+
+        ``load_dotenv()`` runs at *module import*, not in this method, so a
+        ``.env`` file written after ``app.vlm.client`` has been imported is
+        not picked up.
+        """
         self.client = OpenAI(
             api_key=os.getenv("DASHSCOPE_API_KEY"),
             base_url=self.BASE_URL,
@@ -47,6 +63,22 @@ class VLMClient:
         return f"data:image/jpeg;base64,{data}"
 
     def _build_prompt(self, detection_result: dict) -> str:
+        """Render the analysis prompt, embedding the detector JSON verbatim.
+
+        The detector is described by a **hard-coded literal** — "YOLOv8m
+        (trained on COCO, 80 classes)" — not by the weights that actually ran.
+        Both are runtime parameters: ``YOLODetector`` takes ``onnx_path`` and
+        ``classes_path``, and ``run_pipeline.py`` exposes ``--onnx``. Point it
+        at other weights, or at a ``classes.txt`` that is not the 80-entry
+        COCO list, and the prompt still asserts COCO-80. Nothing raises; the
+        damage is in the prose, because section 3 asks the model to attribute
+        gaps to "class not in COCO 80" while section 2 orders it to repeat the
+        counts "as facts from the detector, not your own observation".
+
+        ``detection_result`` is interpolated via ``json.dumps`` (``indent=2``,
+        ``ensure_ascii=False``) with no escaping, so its keys and values become
+        part of the instruction text exactly as written.
+        """
         det_json = json.dumps(detection_result, ensure_ascii=False, indent=2)
         return f"""You are a visual inspection assistant. Analyze this image and produce a structured report.
 
