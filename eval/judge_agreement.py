@@ -44,7 +44,30 @@ DIMENSIONS = ("scene_id", "safety", "domain_awareness", "structure")
 
 
 def load_judge_scores(path: str) -> tuple[dict[str, dict[str, int]], dict[str, Any]]:
-    """Pull the judge's 4-dimension scores out of a run_eval artifact."""
+    """Pull the judge's 4-dimension scores out of a run_eval artifact.
+
+    Returns ``(scores, artifact)``: a per-image map of *exactly* the four
+    :data:`DIMENSIONS` (any other key the judge wrote, e.g. ``reason``, is
+    dropped), and the whole parsed artifact -- the CLI discards the latter
+    with ``_``, it is not a per-image map.
+
+    A row is dropped silently, never counted as a disagreement, when any of
+    these holds:
+
+    * ``judge_raw`` is missing or not a dict;
+    * ``judge_raw["skipped"]`` is truthy -- what ``eval/run_eval.py`` writes
+      when ``skip_judge`` was set, i.e. the judge was never asked;
+    * any of the four dimensions is absent, or is not an ``int``.
+
+    Consequence for the callers: ``n_images_compared`` in :func:`agreement`
+    counts only the rows that survived here, so an image the judge skipped
+    is invisible rather than a zero-agreement data point.
+
+    Note the type test is ``isinstance(..., int)``, which accepts ``bool``
+    (``bool`` subclasses ``int``): a ``true`` in the artifact is kept and
+    arithmetically read as ``1``, not rejected. Strings and floats *are*
+    rejected -- ``"4"`` and ``4.0`` both drop the row.
+    """
     with open(path, encoding="utf-8") as fh:
         artifact = json.load(fh)
 

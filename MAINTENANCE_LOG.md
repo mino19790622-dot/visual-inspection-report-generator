@@ -87,3 +87,8 @@
 - **Change**: 为 VLMClient.__init__ 与 _build_prompt 补 docstring（+32/-0，纯文档）。__init__: api_key 显式取自 DASHSCOPE_API_KEY，而 OpenAI SDK 把 None 当作回落到 OPENAI_API_KEY ⇒ 只有 OPENAI_API_KEY 的机器构造会静默成功、把该 key 发往 dashscope 域名，直到首次 analyze 才报错；两者都缺则构造期即抛 OpenAIError。另 load_dotenv() 在模块导入时执行。_build_prompt: 检测器被写成硬编码字面量 YOLOv8m/COCO 80 类，而 onnx_path 与 classes_path 均为运行时参数、run_pipeline.py 还暴露 --onnx ⇒ 换权重或换类别表后 prompt 仍宣称 COCO-80，不报错但第 3 节按错误类空间归因、第 2 节被要求照抄检测计数。
 - **Verification**: pytest 240 passed（72x3+24 进度点自洽）；ruff All checks passed（files: app/vlm/client.py）
 
+## 2026-10-21 — docs(judge_agreement): pin load_judge_scores drop and type rules
+
+- **Change**: eval/judge_agreement.py::load_judge_scores docstring, +21 lines, docs only. Records: (1) returns (scores, artifact) where the second element is the whole parsed artifact, not a per-image map; (2) each kept entry holds exactly the four DIMENSIONS, so extra keys like reason are dropped; (3) three silent-drop paths -- missing/non-dict judge_raw, truthy judge_raw.skipped (what run_eval.py:109 writes under skip_judge), or any dimension absent/non-int -- so a skipped image never surfaces as a disagreement; (4) isinstance(x, int) accepts bool, so a true becomes 1 rather than being rejected, while "4" and 4.0 both drop the row. All four verified with a /tmp probe over 8 synthetic rows: only ok and boolval survived, boolval kept scene_id=True.
+- **Verification**: pytest 240 passed; ruff All checks passed on eval/judge_agreement.py
+
