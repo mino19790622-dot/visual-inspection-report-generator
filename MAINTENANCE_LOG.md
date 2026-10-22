@@ -92,3 +92,8 @@
 - **Change**: eval/judge_agreement.py::load_judge_scores docstring, +21 lines, docs only. Records: (1) returns (scores, artifact) where the second element is the whole parsed artifact, not a per-image map; (2) each kept entry holds exactly the four DIMENSIONS, so extra keys like reason are dropped; (3) three silent-drop paths -- missing/non-dict judge_raw, truthy judge_raw.skipped (what run_eval.py:109 writes under skip_judge), or any dimension absent/non-int -- so a skipped image never surfaces as a disagreement; (4) isinstance(x, int) accepts bool, so a true becomes 1 rather than being rejected, while "4" and 4.0 both drop the row. All four verified with a /tmp probe over 8 synthetic rows: only ok and boolval survived, boolval kept scene_id=True.
 - **Verification**: pytest 240 passed; ruff All checks passed on eval/judge_agreement.py
 
+## 2026-10-22 — docs(tools): pin _validate reject-vs-clamp asymmetry
+
+- **Change**: app/tools.py::ToolRegistry._validate 补 docstring(+29/-0, 纯文档)。写明两类失败刻意不同：query 非空串/k 非真 int → 拒绝(bool 因 isinstance(True,int) 被显式排除)；类型合法但越界的 k → 静默 clamp(0/-3→1, 99→max_k)，只留一条 INFO 日志。另写明 args 是副本、query 被 strip、以及 clamp 后 execute 落进 call_log ⇒ max_k_requested / top_k span 字段对「要 5」和「要 99」记录相同值。所有断言先用探针实跑取得。
+- **Verification**: pytest 240 passed(files=17, 3x72+24 进度点自洽); ruff files=[app/tools.py] All checks passed
+

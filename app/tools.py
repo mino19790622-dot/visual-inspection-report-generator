@@ -168,6 +168,35 @@ class ToolRegistry:
 
     # -- validation ---------------------------------------------------- #
     def _validate(self, name: str, raw_args: Any) -> tuple[dict, list[str]]:
+        """Coerce one call's arguments; return ``(args, issues)``. Never raises.
+
+        Only ``retrieve_standards`` is inspected — any other ``name`` is
+        handed back untouched with an empty issue list. That is safe today
+        only because ``execute()`` short-circuits ``submit_findings`` and
+        unknown tools *before* calling this method; do not reach for
+        ``_validate`` expecting it to guard anything else.
+
+        Two failure modes, deliberately different:
+
+        * **Rejected** — ``query`` that is not a non-empty string, or ``k``
+          that is not a real ``int``. ``bool`` is excluded explicitly because
+          ``isinstance(True, int)`` is true, so ``k=true`` from a sloppy model
+          is an error rather than a silent ``k=1``. Callers must check
+          ``issues`` first and must not trust ``args`` when it is non-empty:
+          it is either ``{}`` (non-object input) or a half-coerced dict.
+        * **Clamped** — a well-typed but out-of-range ``k`` never fails.
+          ``k=0`` / ``k=-3`` become ``1``; ``k=99`` becomes ``self.max_k``
+          (default ``MAX_K``). The model gets a *say* in the value, the
+          boundary stays a code-side guardrail.
+
+        ``args`` is a **copy** of ``raw_args`` and ``query`` is
+        ``.strip()``-ed, so the caller's dict is untouched while what reaches
+        the retriever is the stripped query. The clamp itself leaves no trace
+        beyond an INFO log: ``execute()`` appends these post-clamp ``args`` to
+        ``self.calls``, so ``call_log()`` — and with it
+        ``GroundedReport.max_k_requested`` and the exported ``top_k`` span
+        field — records ``5`` both for "asked for 5" and for "asked for 99".
+        """
         issues: list[str] = []
         if not isinstance(raw_args, dict):
             return {}, [f"arguments must be an object, got {type(raw_args).__name__}"]
