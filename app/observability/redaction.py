@@ -58,6 +58,18 @@ _MIN_ENV_VALUE_LEN = 8
 
 
 def _looks_secret(value: Any) -> bool:
+    """Shape-based check: does this *value* look like it must not be logged?
+
+    Two independent stages, deliberately overlapping. First the payload shapes
+    (inline image data URI, or a single 200+ character base64 blob that matches
+    in full) because those are what actually blow up a log line. Then the
+    prefix/word patterns, which catch credential-looking strings regardless of
+    where they appear in the value.
+
+    Non-strings are never secrets here: ints, bools and None are already
+    allow-listed by key, and coercion would only produce false positives on
+    numeric fields such as ``total_tokens``.
+    """
     if not isinstance(value, str):
         return False
     if _DATA_URI.search(value) or _LONG_B64.match(value.strip()):
@@ -66,7 +78,13 @@ def _looks_secret(value: Any) -> bool:
 
 
 def _env_values() -> set[str]:
-    """Values of any env var whose name hints at a credential."""
+    """Values of any env var whose name hints at a credential.
+
+    The 8-character floor exists to keep short values (``1``, ``true``,
+    ``/tmp``) out of the secret set: they would match inside unrelated log
+    fields and redact the whole record. The trade-off is accepted — a genuine
+    credential shorter than 8 characters is not a realistic case.
+    """
     out = set()
     for key, value in os.environ.items():
         if not value or len(value) < _MIN_ENV_VALUE_LEN:
@@ -96,6 +114,10 @@ def _clean(node: Any, secrets: set[str], top: bool = False) -> Any:
     top level), so this flag is what stops a nested dict from smuggling in a
     key that is legal only at the root. Lists are walked element-wise; scalars
     that are not strings pass through unchanged.
+
+    ``top`` is not propagated: the recursive calls below always pass it as
+    default ``False``, so every nested dict is filtered against ``ALLOWED_KEYS``
+    no matter how deep it sits.
     """
     if isinstance(node, dict):
         allowed = ALLOWED_TOP_LEVEL if top else ALLOWED_KEYS

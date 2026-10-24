@@ -97,3 +97,8 @@
 - **Change**: app/tools.py::ToolRegistry._validate 补 docstring(+29/-0, 纯文档)。写明两类失败刻意不同：query 非空串/k 非真 int → 拒绝(bool 因 isinstance(True,int) 被显式排除)；类型合法但越界的 k → 静默 clamp(0/-3→1, 99→max_k)，只留一条 INFO 日志。另写明 args 是副本、query 被 strip、以及 clamp 后 execute 落进 call_log ⇒ max_k_requested / top_k span 字段对「要 5」和「要 99」记录相同值。所有断言先用探针实跑取得。
 - **Verification**: pytest 240 passed(files=17, 3x72+24 进度点自洽); ruff files=[app/tools.py] All checks passed
 
+## 2026-10-24 — docs(observability): document the redaction heuristics
+
+- **Change**: 补 _looks_secret 的 docstring（两阶段判定：先 payload 形状 data-URI/长 base64，再凭证前缀模式；非字符串一律不判为密钥，避免对 total_tokens 之类数字字段误报）；补 _env_values 的 docstring，说明 8 字符下限是为了不把 1/true/tmp 这类短值塞进密钥集合而误伤整条记录；_clean 的 docstring 补一句 top 不向子节点传播（递归调用固定传默认 False，嵌套 dict 一律按 ALLOWED_KEYS 过滤）。纯文档，无运行时行为变化。
+- **Verification**: pytest 240 passed / 0 failed（tests/ 全量，进度点 72x3+24 计数）；ruff check --no-cache 仅 lint 本次 dirty 文件 app/observability/redaction.py → All checks passed!
+
