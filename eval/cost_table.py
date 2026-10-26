@@ -49,7 +49,16 @@ def load_artifact(path: str) -> dict[str, Any]:
 
 
 def image_count(artifact: dict[str, Any]) -> int:
-    """Distinct images, not rows: the artifact has one row per (image, arm)."""
+    """Distinct images, not rows: the artifact has one row per (image, arm).
+
+    This figure is reused as the denominator of *every* arm's
+    ``retrieval_calls_per_image`` and ``cost_per_image_*``, so an arm holding
+    fewer rows than the run is still divided by the full image count -- read
+    those columns as "per image in the run", never as "per row this arm has".
+
+    ``r["id"]`` is a hard lookup, unlike the ``.get`` used everywhere else: a
+    single row without an id raises KeyError and takes the whole table down.
+    """
     return len({r["id"] for r in artifact.get("per_image", [])})
 
 
@@ -166,7 +175,27 @@ def marginal_vs_fixed(arms: dict[str, Any]) -> dict[str, Any]:
 
 
 def per_image_deltas(artifact: dict[str, Any]) -> list[dict[str, Any]]:
-    """Where the two grounded arms disagree, image by image."""
+    """Where the two grounded arms disagree, image by image.
+
+    Rows are regrouped by ``id``, so the output is keyed by image rather than
+    by row: an image is emitted only when it has both a ``fixed`` and an
+    ``agentic`` row. Images that ran under ``off`` alone, or whose grounded
+    row never got recorded, vanish without a trace -- a short list means "not
+    comparable", not "no change", and must not be read as agreement. The
+    ``off`` arm is excluded by construction; its cost lives in the arm table.
+
+    Two traps for whoever quotes these numbers:
+
+    * Duplicate ``(id, arm)`` rows collapse to the **last** one here, while
+      ``_sum_tokens`` adds up *every* row for that arm. An image recorded
+      twice therefore makes the arm total disagree with the per-image delta
+      (probe: ``fixed`` rows with findings 2 then 7 give an arm total of 9 but
+      ``findings_fixed=7``). If the two disagree, the artifact has duplicate
+      rows -- settle that before quoting either figure.
+    * ``findings_fixed`` / ``findings_agentic`` echo the raw values and may be
+      ``None``, yet ``findings_delta`` coalesces ``None`` to 0. A missing count
+      prints as ``None -> 2 (+2)``, indistinguishable from a real ``0 -> 2``.
+    """
     rows: dict[str, dict[str, Any]] = {}
     for r in artifact.get("per_image", []):
         rows.setdefault(r["id"], {})[r.get("arm")] = r
