@@ -107,3 +107,8 @@
 - **Change**: eval/cost_table.py: per_image_deltas() 原 docstring 只有一句「where the two grounded arms disagree」，把三条会误导读表人的隐式契约全留空。补写 +31/-2（纯文档）：① 输出按 id 重组，只有同时具备 fixed 与 agentic 行的图片才会出现；只在 off 下跑过、或 grounded 行未记录的图片静默消失 ⇒ 列表短意味着「不可比」而非「无差异」，不能读成一致（探针：img2 只有 fixed+off 行，deltas 仅返回 img1）。② 重复的 (id, arm) 行在此折叠为最后一条，而 _sum_tokens 会把该 arm 的每一行都加进去 ⇒ 同一图片被记录两次时，arm 合计与逐图 delta 会互相矛盾（探针：两条 fixed 行 findings 2、7 ⇒ arm 合计 9，但 findings_fixed=7）。③ findings_fixed/findings_agentic 回显原始值、可为 None，而 findings_delta 把 None 当 0 ⇒ 缺失计数会打印成 None -> 2 (+2)，与真实的 0 -> 2 无法区分。另给 image_count() 补两点：该分母被所有 arm 的 per-image 列复用（行数少的 arm 仍除以全量图片数）；r[id] 是硬取值，缺 id 的行会 KeyError 拖垮整张表。四条均用 /tmp 合成 artifact 探针实测，改前改后探针输出逐字一致 ⇒ 无行为变更。
 - **Verification**: pytest 240 passed; ruff All checks passed (eval/cost_table.py)
 
+## 2026-10-27 — docs(agent): pin the always-zero total_latency_ms
+
+- **Change**: Documented export_node(): _t_start is seeded into initial but not declared in AgentState, and LangGraph keeps only declared channels, so state.get('_t_start') is always None and total_ms is always 0. That 0 reaches /inspect metrics.total_latency_ms and logs/inspect.jsonl, while the v2 trace timing stays real. Also noted both timings exclude export() IO. Docs only, zero behaviour change.
+- **Verification**: pytest 240 passed; ruff app/agent/graph.py All checks passed
+

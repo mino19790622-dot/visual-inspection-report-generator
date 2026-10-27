@@ -223,6 +223,29 @@ def ground_node(state: AgentState) -> dict:
 
 
 def export_node(state: AgentState) -> dict:
+    """Write the artifacts and stamp ``total_latency_ms`` on the final state.
+
+    The stamp is always ``0``, because ``_t_start`` never reaches this node.
+    ``InspectionAgent.run`` seeds it into ``initial``, but it is not a field of
+    :class:`AgentState`, and LangGraph builds state channels from the TypedDict
+    annotations alone — unknown keys are dropped before the first node runs.
+    So ``state.get("_t_start")`` is ``None`` on every call and the expression
+    below collapses to ``0`` (verified against langgraph 1.2.11: a node sees
+    only the declared keys).
+
+    Two live consequences: ``/inspect`` reports ``metrics.total_latency_ms = 0``
+    and ``log_request`` writes that same ``0`` into ``logs/inspect.jsonl``. The
+    v2 trace is unaffected — ``trace`` *is* declared, so its ``totals.latency_ms``
+    is real. One request therefore carries two latencies, one of them always
+    zero.
+
+    Note also that ``total_ms`` is read *before* ``export()`` runs (and
+    ``log_trace`` is called at the same point), so both timings stop at this
+    node and exclude the artifact writes. Making the number real needs a
+    declared ``_t_start: float`` in ``AgentState`` or a late
+    ``trace.total_ms()`` read; both change behaviour, so neither belongs in a
+    docs-only pass.
+    """
     t_start = state.get("_t_start")
     total_ms = int((time.time() - t_start) * 1000) if t_start else 0
     trace = state.get("trace")
