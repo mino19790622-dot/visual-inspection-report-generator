@@ -112,3 +112,8 @@
 - **Change**: Documented export_node(): _t_start is seeded into initial but not declared in AgentState, and LangGraph keeps only declared channels, so state.get('_t_start') is always None and total_ms is always 0. That 0 reaches /inspect metrics.total_latency_ms and logs/inspect.jsonl, while the v2 trace timing stays real. Also noted both timings exclude export() IO. Docs only, zero behaviour change.
 - **Verification**: pytest 240 passed; ruff app/agent/graph.py All checks passed
 
+## 2026-10-28 — Document total_ms as a live wall-clock reading
+
+- **Change**: app/observability/spans.py: added a docstring to RequestTrace.total_ms(). Three measured properties: (1) it is a live reading, not a frozen total - each call re-reads perf_counter, so the JSONL latency_ms is fixed at to_record() time; (2) it includes time outside any span (209.2ms trace vs 105.8ms of spans, 103.5ms unattributed) and is not reconcilable with the per-stage breakdown, while summing duration_ms over-reports when spans nest (130.2 vs 86.9); (3) it stops before artifacts are written, since log_trace runs before exporter.export(). Also noted _t0 is monotonic while started_at is wall clock. Docs only, no behaviour change.
+- **Verification**: pytest 240 passed; ruff All checks passed (app/observability/spans.py)
+

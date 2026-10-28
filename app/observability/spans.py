@@ -98,6 +98,37 @@ class RequestTrace:
         return None
 
     def total_ms(self) -> float:
+        """Wall-clock milliseconds since this trace was constructed.
+
+        Read it as "how long since the trace opened", **not** "how long the
+        request took" and **not** "the sum of the stages". Three properties
+        follow, all measured rather than inferred:
+
+        1. **It is a live reading, not a frozen total.** Every call re-reads
+           ``perf_counter()``, so two calls differ by the time elapsed between
+           them (70 ms apart -> values 70 ms apart). ``totals()`` calls it, so
+           the ``latency_ms`` written to the JSONL is fixed at the moment
+           ``to_record()`` runs. Calling ``to_record()`` later inflates it with
+           whatever happened in between.
+        2. **Time outside any span is included.** In a 209.2 ms trace whose two
+           spans summed to 105.8 ms, 103.5 ms belonged to no stage at all. That
+           gap is the point — it is the unattributed overhead — but it means
+           the number cannot be reconciled against the per-stage breakdown.
+           Summing ``duration_ms`` instead is not a substitute: nested spans are
+           both counted (outer 130.2 ms summed vs 86.9 ms total), so the sum
+           over-reports.
+        3. **It stops before the artifacts are written.** In production the
+           only path here is ``export_node`` -> ``log_trace`` -> ``to_record``,
+           and ``log_trace`` runs *before* ``exporter.export()``, so report
+           rendering and disk writes are excluded. The JSONL write in
+           ``log_trace`` is excluded too (``to_record`` is called first).
+
+        ``_t0`` comes from the monotonic ``perf_counter()`` while ``started_at``
+        comes from the wall clock, so a system clock jump moves ``ts_utc``
+        relative to the offsets without making the durations nonsensical. The
+        clock is never reset: there is no way to close a trace, only to stop
+        reading it.
+        """
         return (time.perf_counter() - self._t0) * 1000
 
     def totals(self) -> dict[str, Any]:
