@@ -97,6 +97,14 @@ MEDIUM_RISK_PATTERNS = re.compile(
 
 # ---------------------------- nodes ---------------------------- #
 def detect_node(state: AgentState) -> dict:
+    """Run the detector over ``state["image_path"]``.
+
+    Reads ``conf_thres`` (default ``0.25``) and writes back only
+    ``det_result``. The detector itself is an ``lru_cache`` singleton, so the
+    threshold is assigned onto that shared instance before every call — one
+    node never observes another run's threshold. When ``trace`` is present the
+    call is wrapped in a ``detect`` span that records the object count.
+    """
     conf = state.get("conf_thres", 0.25)
     detector = _get_detector("yolov8m.onnx")
     detector.conf_thres = conf  # cached instance: update threshold per run
@@ -110,6 +118,13 @@ def detect_node(state: AgentState) -> dict:
 
 
 def lower_threshold_node(state: AgentState) -> dict:
+    """Decay ``conf_thres`` by 0.6 (floored at 0.10) and count the retry.
+
+    This is the only recovery path out of an empty detection: the router sends
+    the graph here at most once, when ``retry_count`` is still ``0``, so the
+    ``0.10`` floor is a guard rail rather than a loop terminator. The human
+    readable ``decisions`` entry is what ends up in the report's audit trail.
+    """
     old = state.get("conf_thres", 0.25)
     new = max(0.10, round(old * 0.6, 3))
     decision = (f"Zero objects detected @ conf={old}; "

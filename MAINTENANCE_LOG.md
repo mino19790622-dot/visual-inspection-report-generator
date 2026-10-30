@@ -117,3 +117,8 @@
 - **Change**: app/observability/spans.py: added a docstring to RequestTrace.total_ms(). Three measured properties: (1) it is a live reading, not a frozen total - each call re-reads perf_counter, so the JSONL latency_ms is fixed at to_record() time; (2) it includes time outside any span (209.2ms trace vs 105.8ms of spans, 103.5ms unattributed) and is not reconcilable with the per-stage breakdown, while summing duration_ms over-reports when spans nest (130.2 vs 86.9); (3) it stops before artifacts are written, since log_trace runs before exporter.export(). Also noted _t0 is monotonic while started_at is wall clock. Docs only, no behaviour change.
 - **Verification**: pytest 240 passed; ruff All checks passed (app/observability/spans.py)
 
+## 2026-10-30 — 记录 agent 两个节点的 state 契约
+
+- **Change**: 给 detect_node / lower_threshold_node 补 docstring：前者说明 conf_thres 默认 0.25、只写回 det_result、detector 是 lru_cache 单例因此每次调用前覆盖阈值、有 trace 时包 detect span；后者说明阈值按 0.6 衰减、下限 0.10、router 最多重试一次（retry_count==0 才进），并点明 decisions 条目会进审计轨迹。纯注释，无运行时改动。
+- **Verification**: pytest 240 passed（17 个测试文件）；ruff check 通过（仅 app/agent/graph.py 被改）
+
