@@ -122,3 +122,8 @@
 - **Change**: 给 detect_node / lower_threshold_node 补 docstring：前者说明 conf_thres 默认 0.25、只写回 det_result、detector 是 lru_cache 单例因此每次调用前覆盖阈值、有 trace 时包 detect span；后者说明阈值按 0.6 衰减、下限 0.10、router 最多重试一次（retry_count==0 才进），并点明 decisions 条目会进审计轨迹。纯注释，无运行时改动。
 - **Verification**: pytest 240 passed（17 个测试文件）；ruff check 通过（仅 app/agent/graph.py 被改）
 
+## 2026-11-02 — docs(obs): pin the set_usage alias and zero-collapse contract
+
+- **Change**: 给 RequestTrace.set_usage 补 docstring（原文只有一行 'Copy token counts out of a provider usage object/dict.'），写清四条不对称契约，全部用探针实测：① dict 认 prompt_tokens/completion_tokens 与 input_tokens/output_tokens 两种拼法，但非 dict 的 provider 对象只按 getattr 读 prompt_tokens/completion_tokens/total_tokens ⇒ 只暴露 input_tokens/output_tokens 的对象记成 None/None；② total_tokens 从不被使用，{'total_tokens': 42} 什么都不记；③ 回退用的是 or，而 0 是 falsy ⇒ provider 真的报了 0 token 时与「没上报」同样落成 None（实测 {'prompt_tokens':0,'completion_tokens':0} → None/None），两种拼法同时存在时 0 会掉到别名上（{'prompt_tokens':0,'input_tokens':9} → 9）；④ usage 为 None 或 {} 时提前 return，是 no-op 而非重置，span 上已有的 10/5 不会被抹掉。另注明此函数只写 span.input_tokens/output_tokens，延迟由调用方自己记（span.meta['latency_ms']）。tests/test_spans.py 补 5 个测试钉住上述行为（零值塌陷、零值落到别名、total_tokens 无效、provider 对象忽略别名、空 usage 不重置）。纯文档 + 测试，生产代码零改动，无运行时行为变化。
+- **Verification**: pytest 245 passed / 0 failed（240 → 245，+5）；ruff check --no-cache 仅 lint 本次两个 dirty 文件（app/observability/spans.py, tests/test_spans.py）→ All checks passed!
+

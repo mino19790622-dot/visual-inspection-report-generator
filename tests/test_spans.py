@@ -48,6 +48,47 @@ class TestSpans:
             trace.set_usage(s, None)
         assert s.input_tokens is None
 
+    def test_zero_token_count_collapses_to_none(self):
+        """A measured 0 is falsy, so the `or` fallback reports 'not reported'."""
+        trace = RequestTrace()
+        with trace.span("vlm_call") as s:
+            trace.set_usage(s, {"prompt_tokens": 0, "completion_tokens": 0})
+        assert s.input_tokens is None and s.output_tokens is None
+
+    def test_zero_prompt_tokens_falls_through_to_the_alias(self):
+        """prompt_tokens=0 is falsy, so input_tokens is used instead."""
+        trace = RequestTrace()
+        with trace.span("vlm_call") as s:
+            trace.set_usage(s, {"prompt_tokens": 0, "input_tokens": 9})
+        assert s.input_tokens == 9
+
+    def test_total_tokens_alone_records_nothing(self):
+        """total_tokens has no fallback role, so it never lands on the span."""
+        trace = RequestTrace()
+        with trace.span("ground") as s:
+            trace.set_usage(s, {"total_tokens": 42})
+        assert s.input_tokens is None and s.output_tokens is None
+
+    def test_provider_object_ignores_the_alias_spellings(self):
+        """Only dicts get the input_tokens/output_tokens fallback."""
+        class U:
+            input_tokens = 9
+            output_tokens = 4
+            total_tokens = 13
+
+        trace = RequestTrace()
+        with trace.span("ground") as s:
+            trace.set_usage(s, U())
+        assert s.input_tokens is None and s.output_tokens is None
+
+    def test_empty_usage_does_not_reset_existing_tokens(self):
+        """`{}` returns early, so whatever the span already holds survives."""
+        trace = RequestTrace()
+        with trace.span("vlm_call") as s:
+            trace.set_usage(s, {"prompt_tokens": 10, "completion_tokens": 5})
+            trace.set_usage(s, {})
+        assert s.input_tokens == 10 and s.output_tokens == 5
+
     def test_totals_aggregate_across_spans(self):
         trace = RequestTrace()
         with trace.span("a") as s:

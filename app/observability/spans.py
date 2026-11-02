@@ -79,7 +79,37 @@ class RequestTrace:
 
     # -- convenience --------------------------------------------------- #
     def set_usage(self, span: Span, usage: dict | None) -> None:
-        """Copy token counts out of a provider usage object/dict."""
+        """Copy token counts out of a provider usage object/dict.
+
+        The aliases and the fallback order below are not symmetric, and the
+        difference is observable in the JSONL:
+
+        1. **Dicts accept both key spellings; provider objects do not.** A dict
+           may use ``prompt_tokens``/``completion_tokens`` or
+           ``input_tokens``/``output_tokens``. A non-dict usage object is read
+           with ``getattr`` over ``("prompt_tokens", "completion_tokens",
+           "total_tokens")`` only — so an object exposing *only*
+           ``input_tokens``/``output_tokens`` yields ``None``/``None``, while
+           the same names in a dict are honoured.
+        2. **``total_tokens`` is never used.** It is read off provider objects
+           but has no fallback role: ``{"total_tokens": 42}`` records nothing.
+        3. **A reported ``0`` collapses to ``None``.** The fallback is
+           ``usage.get("prompt_tokens") or usage.get("input_tokens")``, and
+           ``0`` is falsy — so a call that genuinely consumed zero tokens is
+           indistinguishable from one the provider never reported on. This
+           keeps the module rule ("``None`` means not reported") intact at the
+           cost of losing the zero. With both spellings present the ``0`` falls
+           through to the alias instead: ``{"prompt_tokens": 0,
+           "input_tokens": 9}`` records ``9``.
+        4. **A falsy usage is a no-op, not a reset.** ``None`` and ``{}`` both
+           return early, leaving whatever the span already holds — a span set
+           to ``10``/``5`` keeps those values when ``set_usage(s, {})`` is
+           called afterwards.
+
+        Only ``span.input_tokens`` / ``span.output_tokens`` are written.
+        Latency is not handled here: callers record it themselves
+        (``span.meta["latency_ms"]``).
+        """
         if not usage:
             return
         if not isinstance(usage, dict):
