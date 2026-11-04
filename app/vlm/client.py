@@ -47,7 +47,31 @@ class VLMClient:
 
     @staticmethod
     def _encode_image(image_path: str, max_size: int = 1024) -> str:
-        """Read image, resize if too large, return base64 data URI."""
+        """Read image, resize if too large, return base64 data URI.
+
+        Four asymmetries matter to anything reading the encoded result, all
+        measured rather than inferred:
+
+        * The size cap applies to the **longest edge only**, and the guard is
+          strict ``>``, so a 1024x1024 image is sent untouched while a
+          2000x300 one lands at 1024x153 (the ideal 153.6 truncated by
+          ``int()``, ~0.4% narrower than the original aspect). Total pixels are
+          not bounded directly: 3000x3000 becomes 1024x1024, an 8.6x cut in
+          area, because the limit is an edge length and not a megapixel budget.
+        * ``int(w * scale)`` may round down to **0** on a degenerate aspect
+          ratio: a 5000x2 panorama becomes 1024x0 and ``cv2.resize`` raises
+          ``cv2.error`` ("inv_scale_x > 0"), which is *not* the ``ValueError``
+          this method documents for unreadable input — callers catching
+          ``ValueError`` will not catch it.
+        * Input format is discarded. Everything is re-encoded as JPEG at
+          quality 85 and the prefix is always ``data:image/jpeg`` even for a
+          PNG or a grayscale source, which comes back as 3-channel. A 4-channel
+          PNG is not composited over any background — alpha is simply dropped,
+          so a fully transparent blue pixel still arrives as opaque blue.
+        * ``cv2.imread`` never raises, it returns ``None`` (unreadable, or a
+          directory), hence the explicit ``None`` check and the ``ValueError``
+          carrying the path.
+        """
         img = cv2.imread(image_path)
         if img is None:
             raise ValueError(f"Cannot read image: {image_path}")
